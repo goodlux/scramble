@@ -1,53 +1,28 @@
-# Python virtual environment
-.venv/
-venv/
-ENV/
-env/
-
-# Python bytecode
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
+venv/
 
-# Distribution / packaging
+# Package/build directories
 dist/
 build/
 *.egg-info/
 
-# Model files and large binaries
-*.bin
-*.h5
+# Model caches
+.cache/
+.sentence_transformers/
+~/.cache/torch/
+~/.cache/huggingface/
+
+# Project specific
+.ramble/
+store/
 *.pkl
-*.pt
-*.pth
-*.onnx
-*.dylib
-*.so
-*.dll
 
-# Downloaded model files
-**/torch/
-**/transformers/
-**/sentence_transformers/
-**/.cache/
-**/hub/
-
-# IDE specific files
-.idea/
+# IDEs
 .vscode/
+.idea/
 *.swp
 .DS_Store
-
-# Environment variables
-.env
-.env.*
-
-# Logs and databases
-*.log
-*.sqlite
-*.db
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/

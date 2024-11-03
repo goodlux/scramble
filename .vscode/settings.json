@@ -1,5 +1,0 @@
-{
-    "python.analysis.extraPaths": ["./src"],
-    "python.analysis.typeCheckingMode": "basic",
-    "python.autoComplete.extraPaths": ["./src"]
-}
