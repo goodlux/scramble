@@ -104,7 +104,7 @@ class ContextStore:
             raise
 
     def get_recent_contexts(self,
-                          hours: int = 24,
+                          hours: int = 72,
                           limit: Optional[int] = None) -> List[Context]:
         """Get contexts from recent conversations."""
         cutoff = datetime.utcnow() - timedelta(hours=hours)
