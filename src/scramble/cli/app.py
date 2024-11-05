@@ -3,7 +3,7 @@ import sys
 import os
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, TypedDict
 
 import click
 from rich.console import Console
@@ -11,6 +11,8 @@ from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.table import Table
 from rich.logging import RichHandler
+
+from ..core.stats import global_stats
 
 # Fix imports by using relative imports from parent package
 try:
@@ -24,6 +26,32 @@ except ImportError:
     from scramble.core.store import ContextStore
     from scramble.core.api import AnthropicClient
     from scramble.core.context import Context
+
+class ContextConfig(TypedDict):
+    max_contexts: int
+    time_window_hours: int
+
+class ScoringConfig(TypedDict):
+    recency_weight: float
+    chain_bonus: float
+    decay_days: int
+
+class AppConfig(TypedDict):
+    context: ContextConfig
+    scoring: ScoringConfig
+
+DEFAULT_CONFIG: AppConfig = {
+    'context': {
+        'max_contexts': 20,
+        'time_window_hours': 108,
+    },
+    'scoring': {
+        'recency_weight': 0.05,
+        'chain_bonus': 0.4,
+        'decay_days': 7,
+    }
+}
+
 
 # Set up rich console with proper error handling
 console = Console(stderr=True)
@@ -58,7 +86,21 @@ def cli(ctx):
 
 # 3. CLI Commands
 @cli.command()
+@click.option('--hours', default=48, help='Stats from last N hours')
+
+def config():
+    """Show current configuration"""
+    app = ScrambleCLI()
+    console.print(Panel(str(app.config), title="Current Config"))
+
+def detailed_stats(hours):
+    """Show detailed compression and token usage statistics."""
+    app = ScrambleCLI()
+    app._show_stats()  # Will show the enhanced stats
+
+@cli.command()
 def recompress():
+    ## here be dragons, this didn't work last time I tried, might be irrelevant now
     """One-time recompression of all contexts"""
     store = ContextStore()
     compressor = SemanticCompressor()
@@ -68,6 +110,33 @@ def recompress():
         new_ctx = compressor.compress(text)
         store.add(new_ctx)
         print(f"Recompressed {ctx.id[:8]} ({new_ctx.metadata.get('compression_ratio', 0):.2f}x)")
+
+@cli.command()
+def reindex():
+    """Rebuild context index from stored files."""
+    app = ScrambleCLI()
+
+    with console.status("[bold blue]Reindexing contexts...", spinner="dots"):
+        count = app.store.reindex()
+
+    console.print(f"[green]Successfully reindexed {count} contexts[/green]")
+
+    # Show stats after reindex
+    stats = Table(title="Reindex Results")
+    stats.add_column("Metric", style="cyan")
+    stats.add_column("Value", justify="right")
+
+    stats.add_row("Total Contexts", str(count))
+    stats.add_row(
+        "Context Chains",
+        str(len(app.store.metadata.get('chains', [])))
+    )
+    stats.add_row(
+        "Date Range",
+        f"{app.store.get_date_range_str()}"  # You'll need to add this method
+    )
+
+    console.print(stats)
 
 @cli.command()
 def debug_contexts():
@@ -93,10 +162,15 @@ def debug_contexts():
 
 # 4. Main CLI Class
 class ScrambleCLI:
-    def __init__(self):
+    def __init__(self, config: AppConfig = DEFAULT_CONFIG):
         """Initialize the CLI with core components."""
         try:
             logger.debug("Initializing CLI components")
+
+            self.config = DEFAULT_CONFIG.copy()
+            if config:
+                self.config.update(config)
+
             self.compressor = SemanticCompressor()
             self.store = ContextStore()
 
@@ -161,20 +235,20 @@ class ScrambleCLI:
         """Get relevant contexts for current conversation."""
         try:
             contexts = []
+            max_contexts = self.config['context']['max_contexts']
 
             # Start with chain contexts if we have current context
             if self.client.current_context:
                 chain = self.store.get_conversation_chain(
                     self.client.current_context.id,
-                    #limit=10  # New parameter, falls back to unlimited if not supported
                 )
                 contexts.extend(chain)
 
             # Get recent contexts, leaving room for semantic matches
-            remaining = 10 - len(contexts)
+            remaining = max_contexts - len(contexts)
             if remaining > 0:
                 recent = self.store.get_recent_contexts(
-                    hours=48,
+                    hours=self.config['context']['time_window_hours'],
                     limit=remaining
                 )
                 contexts.extend(recent)
@@ -202,30 +276,34 @@ class ScrambleCLI:
         table.add_row(":h, :help", "Show this help message")
         table.add_row(":s, :stats", "Show system statistics")
         table.add_row(":c, :contexts", "Show stored contexts")
+        table.add_row(":a  :analysis", "Show detailed compression analysis")  # Add this line
         table.add_row(":d", "Toggle debug mode")
         table.add_row(":sim <query>", "Test similarity scoring against all contexts")
         table.add_row(":q, :quit", "Exit the program")
 
         console.print(table)
 
+
     def _show_stats(self):
-        """Show system statistics."""
+        """Show enhanced system statistics."""
         try:
+            # Get conversation summary
             summary = self.store.get_conversation_summary()
 
-            stats = Table(title="System Statistics")
-            stats.add_column("Metric", style="cyan")
-            stats.add_column("Value")
+            # Get compression and token stats
+            stats_table = global_stats.generate_stats_table(hours=24)  # Last 24h
 
-            stats.add_row("Total Conversations", str(summary['total_conversations']))
-            stats.add_row("Recent Contexts", str(summary['recent_contexts']))
-            stats.add_row("Active Chains", str(summary['conversation_chains']))
+            # Show stats
+            console.print("\n[bold]System Statistics[/bold]")
+            console.print(stats_table)
 
-            if summary['last_interaction']:
-                last_seen = summary['last_interaction'].strftime('%Y-%m-%d %H:%M')
-                stats.add_row("Last Activity", last_seen)
-
-            console.print(stats)
+            # Show conversation summary
+            console.print("\n[bold]Conversation Summary[/bold]")
+            summary_table = Table()
+            summary_table.add_row("Total Conversations", str(summary['total_conversations']))
+            summary_table.add_row("Recent Contexts", str(summary['recent_contexts']))
+            summary_table.add_row("Active Chains", str(summary['conversation_chains']))
+            console.print(summary_table)
 
         except Exception as e:
             logger.error(f"Error showing stats: {e}")
@@ -323,6 +401,8 @@ class ScrambleCLI:
                 self._show_stats()
             elif command in ['c', 'contexts']:
                 self._show_contexts()
+            elif command in ['a', 'analysis']:
+                self._show_compression_analysis()
             elif command.startswith('d'):
                 self._toggle_debug(command)
             elif command == 'sim':  # New command
@@ -363,6 +443,57 @@ class ScrambleCLI:
         except Exception as e:
             logger.error(f"Debug error: {e}")
 
+    def _show_compression_analysis(self):
+        """Show detailed compression analysis."""
+        try:
+            # Get stats for different time periods
+            last_hour = global_stats.get_compression_summary(hours=1)
+            last_day = global_stats.get_compression_summary(hours=24)
+            all_time = global_stats.get_compression_summary()
+
+            # Create analysis table
+            table = Table(title="Compression Analysis")
+            table.add_column("Timeframe")
+            table.add_column("Compression")
+            table.add_column("Similarity")
+            table.add_column("Tokens Saved")
+
+            def add_stats_row(timeframe: str, stats: Dict):
+                if not stats:
+                    return
+                comp_stats = stats['compression_stats']
+                sim_stats = stats['similarity_stats']
+                table.add_row(
+                    timeframe,
+                    f"{comp_stats['avg_ratio']:.2f}x",
+                    f"{sim_stats['avg_similarity']:.2%}",
+                    f"{comp_stats['tokens_saved']:,}"
+                )
+
+            add_stats_row("Last Hour", last_hour)
+            add_stats_row("Last 24h", last_day)
+            add_stats_row("All Time", all_time)
+
+            console.print(table)
+
+            # Show token usage summary
+            token_stats = global_stats.get_token_usage_summary(hours=24)
+            if token_stats:
+                usage_table = Table(title="Token Usage (Last 24h)")
+                usage_table.add_row(
+                    "Total Tokens", f"{token_stats['total_tokens']:,}"
+                )
+                usage_table.add_row(
+                    "Avg per Turn", f"{token_stats['avg_tokens_per_turn']:.0f}"
+                )
+                console.print("\n")
+                console.print(usage_table)
+
+        except Exception as e:
+            logger.error(f"Error showing compression analysis: {e}")
+            console.print("[red]Failed to generate analysis[/red]")
+
+
     def start_interactive(self):
         """Start interactive chat session."""
         self._show_welcome()
@@ -395,6 +526,14 @@ class ScrambleCLI:
                         message=user_input,
                         contexts=contexts
                     )
+
+                    # Record stats
+                    global_stats.record_token_usage(
+                        input_tokens=result['usage']['input_tokens'],
+                        output_tokens=result['usage']['output_tokens'],
+                        context_tokens=result['usage'].get('context_tokens', 0)
+                    )
+
 
                 # Store new context with chain linking
                 if self.client.current_context:

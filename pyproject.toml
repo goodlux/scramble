@@ -18,6 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "rich",
+    "nltk",
     "anthropic>=0.18.0",
     "click",
     "sentence-transformers",

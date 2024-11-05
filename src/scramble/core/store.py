@@ -20,9 +20,14 @@ class ContextStore:
         self.metadata_file = self.storage_path / 'metadata.json'
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
-        # Store-level metadata
-        self.metadata = self._load_metadata()
-        self._load_contexts()
+        # Try to load metadata, reindex if missing or corrupted
+        try:
+            self.metadata = self._load_metadata()
+            self._load_contexts()
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.info("Metadata missing or corrupted - rebuilding index...")
+            contexts_found = self.reindex()
+            logger.info(f"Reindexed {contexts_found} contexts")
 
     def _load_metadata(self) -> Dict[str, Any]:
         """Load or create store metadata."""
@@ -70,6 +75,26 @@ class ContextStore:
         except Exception as e:
             logger.error("Error loading contexts: {e}")
             raise
+
+    def get_date_range_str(self) -> str:
+        """Get human readable date range of contexts."""
+        try:
+            dates = [
+                datetime.fromisoformat(ctx.metadata['timestamp'])
+                for ctx in self.contexts.values()
+                if 'timestamp' in ctx.metadata
+            ]
+
+            if not dates:
+                return "No dated contexts"
+
+            oldest = min(dates)
+            newest = max(dates)
+
+            return f"{oldest.strftime('%Y-%m-%d')} to {newest.strftime('%Y-%m-%d')}"
+        except Exception as e:
+            logger.error(f"Error calculating date range: {e}")
+            return "Date range unavailable"
 
     def add(self, context: Context) -> None:
         """Store a compressed context."""
@@ -125,6 +150,36 @@ class ContextStore:
                     if cid in self.contexts
                 ]
         return []
+
+    def reindex(self):
+        """Rebuild index from existing context files."""
+        contexts = {}
+        chains = []
+
+        # Load all context files
+        for ctx_file in self.storage_path.glob('*.ctx'):
+            try:
+                with open(ctx_file, 'rb') as f:
+                    context = pickle.load(f)
+                    contexts[context.id] = context
+
+                    # Reconstruct chains from parent_context metadata
+                    if 'parent_context' in context.metadata:
+                        chains.append([
+                            context.metadata['parent_context'],
+                            context.id
+                        ])
+            except Exception as e:
+                logger.error(f"Error loading {ctx_file}: {e}")
+
+        # Rebuild metadata
+        self.metadata = {
+            'contexts': contexts,
+            'chains': chains,
+            'last_reindex': datetime.utcnow().isoformat()
+        }
+
+        return len(contexts)
 
     def get_conversation_summary(self) -> Dict[str, Any]:
         """Get summary of conversation history."""
