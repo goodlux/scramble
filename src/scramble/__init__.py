@@ -1,8 +1,5 @@
 """scRAMBLE - Semantic Compression for AI Dialogue"""
-from .core.compressor import SemanticCompressor
-from .core.context import Context
-from .core.store import ContextStore
+from .core import Context, SemanticCompressor, ContextStore, AnthropicClient
 
+__all__ = ['Context', 'SemanticCompressor', 'ContextStore', 'AnthropicClient']
 __version__ = "0.1.0"
-
-__all__ = ['SemanticCompressor', 'Context', 'ContextStore']
