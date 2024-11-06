@@ -2,6 +2,7 @@
 import sys
 import os
 import logging
+import dateparser
 from datetime import datetime
 from typing import List, Optional, Dict, Any, TypedDict
 
@@ -12,14 +13,17 @@ from rich.markdown import Markdown
 from rich.table import Table
 from rich.logging import RichHandler
 
+from scramble.core.store import ContextManager
+
 from ..core.stats import global_stats
 
 # Fix imports by using relative imports from parent package
 try:
     from ..core.compressor import SemanticCompressor
-    from ..core.store import ContextStore
+    from ..core.store import ContextStore, ContextManager
     from ..core.api import AnthropicClient
     from ..core.context import Context
+
 except ImportError:
     # Alternative import if running directly
     from scramble.core.compressor import SemanticCompressor
@@ -42,7 +46,7 @@ class AppConfig(TypedDict):
 
 DEFAULT_CONFIG: AppConfig = {
     'context': {
-        'max_contexts': 20,
+        'max_contexts': 40,
         'time_window_hours': 108,
     },
     'scoring': {
@@ -163,6 +167,10 @@ def debug_contexts():
 # 4. Main CLI Class
 class ScrambleCLI:
     def __init__(self, config: AppConfig = DEFAULT_CONFIG):
+
+        self.context_manager = ContextManager()
+
+
         """Initialize the CLI with core components."""
         try:
             logger.debug("Initializing CLI components")
@@ -187,6 +195,30 @@ class ScrambleCLI:
         except Exception as e:
             logger.error(f"Failed to initialize CLI: {e}")
             raise
+
+    def process_message(self, message: str) -> List[Context]:
+        """Process message and select relevant contexts."""
+        candidates = []
+
+        # Check for temporal references
+        if potential_timeframe := dateparser.parse(message):
+            historical = self.context_manager.find_contexts_by_timeframe(message)
+            candidates.extend(historical)
+
+        # Get recent contexts
+        recent = self.store.get_recent_contexts(hours=48)
+        candidates.extend(recent)
+
+
+        # If we have current context, follow its chain
+        if self.client.current_context:
+            chain = self.context_manager.get_conversation_chain(
+                self.client.current_context.id
+            )
+            candidates.extend(chain)
+
+        # Select within token budget
+        return self.context_manager.select_contexts(message, candidates)
 
     def _show_welcome(self):
         """Show enhanced welcome message with context stats."""
@@ -517,11 +549,12 @@ class ScrambleCLI:
                     self._handle_command(user_input[1:])
                     continue
 
-                # Get relevant contexts
-                contexts = self._get_relevant_contexts()
-
-                # Process message
+                # Process message and get response
                 with console.status("[bold blue]Thinking...", spinner="dots"):
+                    # Get contexts using process_message
+                    contexts = self.process_message(user_input)
+
+                    # Send message to Claude
                     result = self.client.send_message(
                         message=user_input,
                         contexts=contexts
@@ -534,38 +567,38 @@ class ScrambleCLI:
                         context_tokens=result['usage'].get('context_tokens', 0)
                     )
 
+                    # Store new context with chain linking
+                    if self.client.current_context:
+                        result['context'].metadata['parent_context'] = \
+                            self.client.current_context.id
+                    self.store.add(result['context'])
 
-                # Store new context with chain linking
-                if self.client.current_context:
-                    result['context'].metadata['parent_context'] = \
-                        self.client.current_context.id
-                self.store.add(result['context'])
+                    # Show response
+                    console.print("\n[bold cyan]Claude:[/bold cyan]")
+                    console.print(Markdown(result['response']))
 
-                # Show response
-                console.print("\n[bold cyan]Claude:[/bold cyan]")
-                console.print(Markdown(result['response']))
-
-                # Show debug info if enabled
-                if logger.level <= logging.DEBUG:
-                    usage = result['usage']
-                    stats = Table.grid()
-                    stats.add_row(
-                        "[dim]Tokens:[/dim]",
-                        f"[blue dim]in: {usage['input_tokens']}[/blue dim]",
-                        f"[blue dim]out: {usage['output_tokens']}[/blue dim]"
-                    )
-                    if contexts:
+                    # Show debug info if enabled
+                    if logger.level == logging.DEBUG:
+                        usage = result['usage']
+                        stats = Table.grid()
                         stats.add_row(
-                            "[dim]Contexts:[/dim]",
-                            f"[blue dim]{len(contexts)} used[/blue dim]"
+                            "[dim]Tokens:[/dim]",
+                            f"[blue dim]in: {usage['input_tokens']}[/blue dim]",
+                            f"[blue dim]out: {usage['output_tokens']}[/blue dim]"
                         )
-                    console.print(stats)
+                        if contexts:  # Changed from all_contexts to contexts
+                            stats.add_row(
+                                "[dim]Contexts:[/dim]",
+                                f"[blue dim]{len(contexts)} used[/blue dim]"  # Changed from all_contexts to contexts
+                            )
+                        console.print(stats)
 
-                console.print()
+                    console.print()
 
             except KeyboardInterrupt:
                 console.print("\n[dim]Goodbye! Contexts saved.[/dim]")
                 break
+
             except Exception as e:
                 logger.exception("Error in interactive session")
                 console.print(Panel(

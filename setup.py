@@ -21,7 +21,8 @@ setup(
         'click>=8.0.0',
         'numpy>=1.20.0',
         'sentence-transformers>=2.0.0',
-        'nltk'
+        'nltk',
+        'dateparser'
     ],
     cmdclass={
         'install': PostInstallCommand,

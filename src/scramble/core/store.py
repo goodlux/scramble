@@ -1,10 +1,13 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 import pickle
 import logging
+import dateparser
 from datetime import datetime, timedelta
 import json
 import numpy as np
+from dateparser.conf import Settings
+from .compressor import SemanticCompressor
 
 from .context import Context
 
@@ -28,6 +31,10 @@ class ContextStore:
             logger.info("Metadata missing or corrupted - rebuilding index...")
             contexts_found = self.reindex()
             logger.info(f"Reindexed {contexts_found} contexts")
+
+    def get(self, context_id: str) -> Optional[Context]:
+        """Retrieve a context by ID."""
+        return self.contexts.get(context_id)
 
     def _load_metadata(self) -> Dict[str, Any]:
         """Load or create store metadata."""
@@ -207,3 +214,138 @@ class ContextStore:
         self.metadata = self._create_metadata()
         self.metadata['created_at'] = created_at
         self._save_metadata(self.metadata)
+
+
+class ContextManager:
+    def __init__(self, store_path: Optional[str] = None):
+            self.store = ContextStore(store_path)
+            self.max_tokens = 4000  # Configurable token budget
+            # Add the compressor
+            self.compressor = SemanticCompressor()  # Make sure to import SemanticCompressor
+
+    def process_message(self, message: str) -> List[Context]:
+        """Process message and select relevant contexts."""
+        candidates = []
+
+        # Check for temporal references
+        if dateparser.parse(message):
+            historical = self.find_contexts_by_timeframe(message)
+            candidates.extend(historical)
+
+        # Get recent contexts
+        recent = self.store.get_recent_contexts(hours=48)
+        candidates.extend(recent)
+
+        # If we have current context, follow its chain
+        current_id = self.store.metadata.get('current_context_id')
+        if current_id:
+            chain = self.get_conversation_chain(current_id)
+            candidates.extend(chain)
+
+        # Select within token budget
+        return self.select_contexts(message, candidates)
+
+    def find_contexts_by_timeframe(self, query: str) -> List[Context]:
+        """Find contexts using natural language time reference."""
+        try:
+            # Use a simple dictionary with basic settings
+            timeframe = dateparser.parse(
+                query,
+                settings={
+                    'RELATIVE_BASE': datetime.now(),
+                    'PREFER_DATES_FROM': 'past',
+                    'TO_TIMEZONE': 'UTC'
+                }
+            )
+
+            if not timeframe:
+                return []
+
+            # Add a window around the timeframe (e.g., ±12 hours)
+            window_start = timeframe - timedelta(hours=12)
+            window_end = timeframe + timedelta(hours=12)
+
+            # Find contexts within the window
+            matches = []
+            for ctx in self.store.list():
+                try:
+                    if window_start <= ctx.created_at <= window_end:
+                        matches.append(ctx)
+                except (TypeError, AttributeError) as e:
+                    logger.warning(f"Error comparing context dates: {e}")
+                    continue
+
+            return matches
+
+        except Exception as e:
+            logger.error(f"Error finding contexts by timeframe: {e}")
+            return []
+
+    def get_conversation_chain(self, context_id: str) -> List[Context]:
+        """Get full chain of contexts connected to this one."""
+        chain = []
+        current_id = context_id
+
+        # Follow parent links to build chain
+        while current_id:
+            context = self.store.get(current_id)
+            if not context:
+                break
+
+            chain.append(context)
+            current_id = context.parent_id
+
+        return chain
+
+    def select_contexts(self, message: str, candidates: List[Context]) -> List[Context]:
+        """Select contexts within token budget with improved scoring."""
+        scored = []
+        now = datetime.now()
+
+        # First, get message embedding once
+        message_embedding = self.compressor.model.encode(message, convert_to_numpy=True)
+
+        for ctx in candidates:
+            score = 0.0
+
+            # Recency score (exponential decay over 7 days)
+            age = (now - ctx.created_at).total_seconds()
+            recency_score = np.exp(-age / (7 * 24 * 3600))
+            score += 0.3 * recency_score
+
+            # Chain relationship score (boost for related contexts)
+            if ctx.parent_id:
+                chain_contexts = self.store.get_conversation_chain(ctx.id)
+                chain_length = len(chain_contexts)
+                score += 0.2 * min(chain_length / 5, 1.0)  # Cap at 5 contexts
+
+            # Semantic relevance score using existing embeddings
+            try:
+                # Use the pre-computed embeddings from the context
+                similarities = np.dot(ctx.embeddings, message_embedding)
+                similarity_score = float(np.mean(similarities))
+                score += 0.5 * similarity_score
+            except (AttributeError, Exception) as e:
+                logger.debug(f"Could not compute similarity: {e}")
+
+            scored.append((ctx, score, ctx.token_count))
+
+        # Sort by score and select within budget
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        selected = []
+        total_tokens = 0
+
+        for ctx, score, tokens in scored:
+            if total_tokens + tokens <= self.max_tokens:
+                selected.append(ctx)
+                total_tokens += tokens
+
+                # Always include direct parent contexts
+                if ctx.parent_id and total_tokens + tokens <= self.max_tokens:
+                    parent = self.store.get(ctx.parent_id)
+                    if parent and parent not in selected:
+                        selected.append(parent)
+                        total_tokens += parent.token_count
+
+        return selected

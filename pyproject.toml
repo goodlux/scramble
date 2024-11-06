@@ -5,16 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "scramble"
 version = "0.1.0"
-authors = [
-    { name = "Rob Spectre" }
-]
+authors = [{ name = "Rob Spectre" }]
 description = "Semantic Compression for AI Dialogue"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
 ]
 dependencies = [
     "rich",
@@ -24,7 +22,8 @@ dependencies = [
     "sentence-transformers",
     "click>=8.0.0",
     "numpy>=1.20.0",
-    "sentence-transformers>=2.0.0"
+    "sentence-transformers>=2.0.0",
+    "datetime",
 ]
 
 [project.scripts]
