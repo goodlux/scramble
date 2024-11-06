@@ -3,9 +3,9 @@ import pickle
 from pathlib import Path
 import json
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
-def safe_unpickle(file_path: Path) -> Dict[str, Any]:
+def safe_unpickle(file_path: Path) -> Optional[Dict[str, Any]]:
     """Safely unpickle a context file with error handling."""
     try:
         with open(file_path, 'rb') as f:
@@ -29,7 +29,7 @@ def extract_text_content(compressed_tokens: List[Dict[str, Any]]) -> str:
             text_parts.append(token)
     return "\n".join(text_parts)
 
-def create_full_file(context_data: Dict[str, Any], base_path: Path, context_id: str) -> Path:
+def create_full_file(context_data: Any, base_path: Path, context_id: str) -> Path:
     """Create a .full file containing the conversation text."""
     full_dir = base_path / 'full'
     full_dir.mkdir(exist_ok=True)
@@ -38,14 +38,14 @@ def create_full_file(context_data: Dict[str, Any], base_path: Path, context_id: 
 
     # Extract metadata
     metadata = {
-        'timestamp': context_data.get('created_at', datetime.utcnow()).isoformat(),
+        'timestamp': context_data.created_at.isoformat(),
         'context_id': context_id,
-        'compression_ratio': context_data.get('metadata', {}).get('compression_ratio', 1.0),
-        'parent_context': context_data.get('metadata', {}).get('parent_context'),
+        'compression_ratio': context_data.metadata.get('compression_ratio', 1.0) if hasattr(context_data, 'metadata') else 1.0,
+        'parent_context': context_data.metadata.get('parent_context') if hasattr(context_data, 'metadata') else None
     }
 
     # Extract text content
-    text_content = extract_text_content(context_data.get('compressed_tokens', []))
+    text_content = extract_text_content(context_data.compressed_tokens)
 
     # Write full file with metadata header and content
     with open(full_path, 'w', encoding='utf-8') as f:
@@ -91,6 +91,7 @@ def migrate_contexts(ramble_dir: str = "~/.ramble") -> None:
 
         except Exception as e:
             print(f"Error processing {ctx_file}: {e}")
+            raise  # Temporarily raise to see full error trace
 
 if __name__ == '__main__':
     migrate_contexts()

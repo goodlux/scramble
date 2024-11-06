@@ -36,6 +36,35 @@ class ContextStore:
         """Retrieve a context by ID."""
         return self.contexts.get(context_id)
 
+    def _create_full_file(self, context: Context) -> None:
+        """Create a .full file for the context."""
+        full_path = self.storage_path / 'full' / f"{context.id}.full"
+
+        # Build metadata
+        metadata = {
+            'timestamp': context.created_at.isoformat(),
+            'context_id': context.id,
+            'compression_ratio': context.metadata.get('compression_ratio', 1.0),
+            'parent_context': context.metadata.get('parent_context'),
+            'chain_id': context.metadata.get('chain_id'),
+            'usage': context.metadata.get('usage')
+        }
+
+        # Extract text content
+        text_parts = []
+        for token in context.compressed_tokens:
+            if isinstance(token, dict) and 'content' in token:
+                content = token['content']
+                speaker = token.get('speaker', '')
+                if speaker:
+                    text_parts.append(f"{speaker}: {content}")
+                else:
+                    text_parts.append(content)
+            elif isinstance(token, str):
+                text_parts.append(token)
+
+        text_content = "\n".join(text_parts)
+
     def _load_metadata(self) -> Dict[str, Any]:
         """Load or create store metadata."""
         if self.metadata_file.exists():
@@ -124,13 +153,20 @@ class ContextStore:
         else:
             self.metadata['context_chains'].append([context.id])
 
-        # Save context and metadata
+        # Save context, full file, and metadata
         try:
+            # Save binary context
             context_path = self.storage_path / f"{context.id}.ctx"
             with open(context_path, 'wb') as f:
                 pickle.dump(context, f)
+
+            # Create human-readable version
+            self._create_full_file(context)
+
+            # Save metadata
             self._save_metadata(self.metadata)
             logger.debug(f"Saved context to {context_path}")
+
         except Exception as e:
             logger.error(f"Error saving context {context.id[:8]}: {e}")
             raise
