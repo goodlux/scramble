@@ -28,7 +28,7 @@ store/
 .DS_Store.venv/
 
 # NLTK data directory (builds when necessary)
-./data/nltk_data/tokenizers/punkt/
+./data/nltk_data/tokenizers/punkt_tab/
 
 # Ignore all .DS_Store files in the project
 **/.DS_Store
