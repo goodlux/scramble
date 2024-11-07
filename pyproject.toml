@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "scramble"
 version = "0.1.0"
-authors = [{ name = "Rob" }]
+authors = [{ name = "lux" }]
 description = "Semantic Compression for AI Dialogue"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -24,6 +24,7 @@ dependencies = [
     "numpy>=1.20.0",
     "sentence-transformers>=2.0.0",
     "datetime",
+    "dateparse",
 ]
 
 [project.scripts]
