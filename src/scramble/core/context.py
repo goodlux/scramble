@@ -23,6 +23,22 @@ class Context:
         return hash(self.id)
 
     @property
+    def text_content(self) -> str:
+        """Get full text content from compressed tokens."""
+        text_parts = []
+        for token in self.compressed_tokens:
+            if isinstance(token, dict) and 'content' in token:
+                content = token['content']
+                speaker = token.get('speaker', '')
+                if speaker:
+                    text_parts.append(f"{speaker}: {content}")
+                else:
+                    text_parts.append(content)
+            elif isinstance(token, str):
+                text_parts.append(token)
+        return "\n".join(text_parts)
+
+    @property
     def size(self) -> int:
         """Return the size of the compressed context in tokens."""
         return len(self.compressed_tokens)

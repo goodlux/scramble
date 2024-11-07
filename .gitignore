@@ -26,3 +26,6 @@ store/
 .idea/
 *.swp
 .DS_Store.venv/
+
+# NLTK data directory (builds when necessary)
+./data/nltk_data/tokenizers/punkt/

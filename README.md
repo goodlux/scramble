@@ -1,6 +1,6 @@
-# scRAMBLE
+# scRAMble
 
-Semantic Compression for AI Dialogue
+semantic compression RAM-based language exchange
 
 ## Installation
 

@@ -1,49 +1,72 @@
-# 1. Imports and setup
+"""
+Scramble CLI Application
+
+This module provides the command-line interface for the Scramble dialogue system,
+handling user interaction, context management, and AI model communication.
+"""
+
+# Standard library imports
 import sys
 import os
 import logging
-import dateparser
 from datetime import datetime
 from typing import List, Optional, Dict, Any, TypedDict
 
+# Third-party imports
 import click
+import dateparser
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.table import Table
 from rich.logging import RichHandler
 
-from scramble.core.store import ContextManager
-
-from ..core.stats import global_stats
-
-# Fix imports by using relative imports from parent package
+# Local imports
 try:
     from ..core.compressor import SemanticCompressor
     from ..core.store import ContextStore, ContextManager
     from ..core.api import AnthropicClient
     from ..core.context import Context
-
+    from ..core.stats import global_stats
 except ImportError:
     # Alternative import if running directly
     from scramble.core.compressor import SemanticCompressor
-    from scramble.core.store import ContextStore
+    from scramble.core.store import ContextStore, ContextManager
     from scramble.core.api import AnthropicClient
     from scramble.core.context import Context
+    from scramble.core.stats import global_stats
 
+# Custom exceptions
+class ScrambleError(Exception):
+    """Base exception class for Scramble-specific errors."""
+    pass
+
+class ConfigurationError(ScrambleError):
+    """Raised when there's an issue with configuration."""
+    pass
+
+class ContextError(ScrambleError):
+    """Raised when there's an issue with context management."""
+    pass
+
+# Type definitions
 class ContextConfig(TypedDict):
-    max_contexts: int
-    time_window_hours: int
+    """Configuration settings for context management."""
+    max_contexts: int  # Maximum number of contexts to maintain
+    time_window_hours: int  # Time window for considering relevant contexts
 
 class ScoringConfig(TypedDict):
-    recency_weight: float
-    chain_bonus: float
-    decay_days: int
+    """Configuration settings for context scoring."""
+    recency_weight: float  # Weight given to recency in scoring
+    chain_bonus: float  # Bonus for contexts in the same conversation chain
+    decay_days: int  # Number of days after which context relevance decays
 
 class AppConfig(TypedDict):
+    """Main application configuration."""
     context: ContextConfig
     scoring: ScoringConfig
 
+# Default configuration
 DEFAULT_CONFIG: AppConfig = {
     'context': {
         'max_contexts': 40,
@@ -56,67 +79,80 @@ DEFAULT_CONFIG: AppConfig = {
     }
 }
 
+# Setup logging and console
+console = Console(stderr=True, soft_wrap=True)
 
-# Set up rich console with proper error handling
-console = Console(stderr=True)
+def setup_logging(console: Console) -> None:
+    """
+    Configure application logging with rich handler.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s",
+        handlers=[
+            RichHandler(
+                console=console,
+                rich_tracebacks=True,
+                show_time=False,
+                show_path=False,
+                markup=True
+            )
+        ]
+    )
 
-# Configure logging with rich handler
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    handlers=[
-        RichHandler(
-            console=console,
-            rich_tracebacks=True,
-            show_time=False,
-            show_path=False
-        )
-    ]
-)
+setup_logging(console)
 logger = logging.getLogger(__name__)
 
-# 2. CLI group definition
+# CLI commands
 @click.group(invoke_without_command=True)
 @click.pass_context
-def cli(ctx):
-    """ramble - Semantic Compression for AI Dialogue"""
+def cli(ctx: click.Context) -> None:
+    """Scramble - Semantic Compression for AI Dialogue"""
     if ctx.invoked_subcommand is None:
         try:
             app = ScrambleCLI()
             app.start_interactive()
         except Exception as e:
-            console.print(f"[red]Failed to start ramble: {e}[/red]")
+            console.print(f"[red]Failed to start Scramble: {e}[/red]")
             sys.exit(1)
 
-# 3. CLI Commands
 @cli.command()
-@click.option('--hours', default=48, help='Stats from last N hours')
-
-def config():
-    """Show current configuration"""
+def config() -> None:
+    """Show current configuration settings."""
     app = ScrambleCLI()
     console.print(Panel(str(app.config), title="Current Config"))
 
-def detailed_stats(hours):
-    """Show detailed compression and token usage statistics."""
+@cli.command()
+@click.option('--hours', default=48, help='Stats from last N hours')
+def detailed_stats(hours: int) -> None:
+    """Show detailed statistics for the last N hours."""
     app = ScrambleCLI()
-    app._show_stats()  # Will show the enhanced stats
+    app._show_stats()
 
 @cli.command()
-def recompress():
-    ## here be dragons, this didn't work last time I tried, might be irrelevant now
-    """One-time recompression of all contexts"""
+def recompress() -> None:
+    """
+    One-time recompression of all contexts.
+    Warning: This is a potentially destructive operation.
+    """
     store = ContextStore()
     compressor = SemanticCompressor()
 
-    for ctx in store.list():
-        text = "\n".join(chunk['content'] if isinstance(chunk, dict) else str(chunk) for chunk in ctx.compressed_tokens)
-        new_ctx = compressor.compress(text)
-        store.add(new_ctx)
-        print(f"Recompressed {ctx.id[:8]} ({new_ctx.metadata.get('compression_ratio', 0):.2f}x)")
+    with console.status("[bold blue]Recompressing contexts...", spinner="dots"):
+        for ctx in store.list():
+            text = "\n".join(
+                chunk['content'] if isinstance(chunk, dict) else str(chunk)
+                for chunk in ctx.compressed_tokens
+            )
+            new_ctx = compressor.compress(text)
+            store.add(new_ctx)
+            console.print(
+                f"Recompressed {ctx.id[:8]} "
+                f"({new_ctx.metadata.get('compression_ratio', 0):.2f}x)"
+            )
 
 @cli.command()
-def reindex():
+def reindex() -> None:
     """Rebuild context index from stored files."""
     app = ScrambleCLI()
 
@@ -125,7 +161,7 @@ def reindex():
 
     console.print(f"[green]Successfully reindexed {count} contexts[/green]")
 
-    # Show stats after reindex
+    # Show reindex statistics
     stats = Table(title="Reindex Results")
     stats.add_column("Metric", style="cyan")
     stats.add_column("Value", justify="right")
@@ -137,13 +173,13 @@ def reindex():
     )
     stats.add_row(
         "Date Range",
-        f"{app.store.get_date_range_str()}"  # You'll need to add this method
+        f"{app.store.get_date_range_str()}"
     )
 
     console.print(stats)
 
 @cli.command()
-def debug_contexts():
+def debug_contexts() -> None:
     """Show detailed information about stored contexts."""
     app = ScrambleCLI()
     contexts = app.store.list()
@@ -164,7 +200,7 @@ def debug_contexts():
 
     console.print(table)
 
-# 4. Main CLI Class
+# Main CLI Class
 class ScrambleCLI:
     def __init__(self, config: AppConfig = DEFAULT_CONFIG):
 
@@ -607,6 +643,6 @@ class ScrambleCLI:
                     border_style="red"
                 ))
 
-# 5. Main guard
+# Main guard
 if __name__ == '__main__':
     cli()

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "scramble"
 version = "0.1.0"
-authors = [{ name = "Rob Spectre" }]
+authors = [{ name = "Rob" }]
 description = "Semantic Compression for AI Dialogue"
 readme = "README.md"
 requires-python = ">=3.8"

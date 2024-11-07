@@ -27,7 +27,7 @@ class AnthropicClient:
 
     def __init__(self,
                  api_key: Optional[str] = None,
-                 model: str = "claude-3-5-haiku-20241022",
+                 model: str = "claude-3-5-sonnet-latest", # claude-3-5-haiku-latest
                  compressor: Optional[SemanticCompressor] = None,
                  max_context_messages: int = 10):
         """Initialize the Anthropic client."""
