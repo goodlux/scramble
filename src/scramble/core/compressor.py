@@ -9,8 +9,21 @@ from .stats import global_stats
 import nltk
 from nltk.tokenize import sent_tokenize
 
-# grab tokenizer data from the nltk_data folder
+# Define the path to the punkt.zip file
+punkt_zip_path = './data/nltk_data/tokenizers/punkt.zip'
 nltk.data.path.append('./data/nltk_data')
+
+# Extract the punkt.zip file if it hasn't been extracted yet
+if not os.path.exists(os.path.join(nltk_data_path, 'tokenizers', 'punkt')):
+    with zipfile.ZipFile(punkt_zip_path, 'r') as zip_ref:
+        zip_ref.extractall(nltk_data_path)
+
+# Set the NLTK data path to the directory where you extracted the punkt data
+nltk.data.path.append(nltk_data_path)
+
+
+
+
 
 logger = logging.getLogger(__name__)
 

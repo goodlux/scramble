@@ -29,3 +29,6 @@ store/
 
 # NLTK data directory (builds when necessary)
 ./data/nltk_data/tokenizers/punkt/
+
+# Ignore all .DS_Store files in the project
+**/.DS_Store
