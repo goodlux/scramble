@@ -20,6 +20,8 @@ from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.table import Table
 from rich.logging import RichHandler
+from rich.text import Text
+import pickle
 
 # Local imports
 try:
@@ -70,7 +72,7 @@ class AppConfig(TypedDict):
 DEFAULT_CONFIG: AppConfig = {
     'context': {
         'max_contexts': 40,
-        'time_window_hours': 108,
+        'time_window_hours': 200,
     },
     'scoring': {
         'recency_weight': 0.05,
@@ -117,10 +119,147 @@ def cli(ctx: click.Context) -> None:
             sys.exit(1)
 
 @cli.command()
+@click.argument('context_id', required=False)
+def inspect(context_id: Optional[str] = None):
+    """Inspect context files and compare full/compressed versions."""
+    app = ScrambleCLI()
+
+    if context_id:
+        # Look at specific context
+        compressed_path = app.store.storage_path / f"{context_id}.ctx"
+        full_path = app.store.storage_path.parent / 'full' / f"{context_id}.ctx"
+
+        table = Table(title=f"Context Inspection: {context_id[:8]}")
+        table.add_column("Version")
+        table.add_column("Content")
+        table.add_column("Metadata")
+
+        if compressed_path.exists():
+            with open(compressed_path, 'rb') as f:
+                compressed = pickle.load(f)
+                table.add_row(
+                    "Compressed",
+                    compressed.text_content[:200] + "...",
+                    str(dict(compressed.metadata))
+                )
+
+        if full_path.exists():
+            with open(full_path, 'rb') as f:
+                full = pickle.load(f)
+                table.add_row(
+                    "Full",
+                    full.text_content[:200] + "...",
+                    str(dict(full.metadata))
+                )
+
+        console.print(table)
+
+    else:
+        # Show summary of all contexts
+        table = Table(title="Context Files Overview")
+        table.add_column("Context ID")
+        table.add_column("Has Compressed")
+        table.add_column("Has Full")
+        table.add_column("Date")
+        table.add_column("Size Diff")
+
+        compressed_path = app.store.storage_path
+        full_path = app.store.storage_path.parent / 'full'
+
+        for ctx_file in compressed_path.glob('*.ctx'):
+            ctx_id = ctx_file.stem
+            full_file = full_path / f"{ctx_id}.ctx"
+
+            with open(ctx_file, 'rb') as f:
+                compressed = pickle.load(f)
+
+            has_full = "✓" if full_file.exists() else "✗"
+            has_compressed = "✓"
+            date = compressed.created_at.strftime("%Y-%m-%d")
+
+            if full_file.exists():
+                with open(full_file, 'rb') as f:
+                    full = pickle.load(f)
+                size_diff = f"{len(compressed.text_content) / len(full.text_content):.2f}x"
+            else:
+                size_diff = "N/A"
+
+            table.add_row(
+                ctx_id[:8],
+                has_compressed,
+                has_full,
+                date,
+                size_diff
+            )
+
+        console.print(table)
+
+@cli.command()
+@click.option('--dry-run', is_flag=True, help='Show what would be done without making changes')
+def recompress_full(dry_run: bool):
+    """Recompress all full contexts using current compression settings."""
+    store = ContextStore()
+    compressor = SemanticCompressor()
+    full_path = store.storage_path.parent / 'full'
+
+    table = Table(title="Recompression Results")
+    table.add_column("Context ID")
+    table.add_column("Old Size")
+    table.add_column("New Size")
+    table.add_column("Improvement")
+
+    for ctx_file in full_path.glob('*.ctx'):
+        try:
+            with open(ctx_file, 'rb') as f:
+                full_ctx = pickle.load(f)
+
+            # Get original compressed version for comparison
+            old_compressed = store.contexts.get(full_ctx.id)
+            old_size = sum(len(c['content']) for c in old_compressed.compressed_tokens) if old_compressed else 0
+
+            # Create new compressed version
+            new_compressed = compressor.compress(full_ctx.text_content, full_ctx.metadata)
+            new_size = sum(len(c['content']) for c in new_compressed.compressed_tokens)
+
+            improvement = ((old_size - new_size) / old_size * 100) if old_size > 0 else 0
+
+            table.add_row(
+                full_ctx.id[:8],
+                str(old_size),
+                str(new_size),
+                f"{improvement:+.1f}%"
+            )
+
+            if not dry_run:
+                store.add(new_compressed)
+
+        except Exception as e:
+            logger.error(f"Error processing {ctx_file}: {e}")
+
+    console.print(table)
+
+
+@cli.command()
 def config() -> None:
     """Show current configuration settings."""
     app = ScrambleCLI()
-    console.print(Panel(str(app.config), title="Current Config"))
+
+    # Create a formatted table instead of raw dict string
+    table = Table(title="Current Configuration")
+    table.add_column("Section", style="cyan")
+    table.add_column("Setting", style="blue")
+    table.add_column("Value", style="green")
+
+    # Add context settings
+    for key, value in app.config['context'].items():
+        table.add_row("context", key, str(value))
+
+    # Add scoring settings
+    for key, value in app.config['scoring'].items():
+        table.add_row("scoring", key, str(value))
+
+    console.print("\n")
+    console.print(Panel.fit(table, title="Configuration"))
 
 @cli.command()
 @click.option('--hours', default=48, help='Stats from last N hours')
@@ -165,16 +304,16 @@ def reindex() -> None:
     stats = Table(title="Reindex Results")
     stats.add_column("Metric", style="cyan")
     stats.add_column("Value", justify="right")
-
     stats.add_row("Total Contexts", str(count))
     stats.add_row(
         "Context Chains",
         str(len(app.store.metadata.get('chains', [])))
     )
+
     stats.add_row(
-        "Date Range",
-        f"{app.store.get_date_range_str()}"
-    )
+            "Date Range",
+            f"{app.context_manager.store.get_date_range().__str__()}"
+        )
 
     console.print(stats)
 
@@ -202,21 +341,19 @@ def debug_contexts() -> None:
 
 # Main CLI Class
 class ScrambleCLI:
+
     def __init__(self, config: AppConfig = DEFAULT_CONFIG):
-
-        self.context_manager = ContextManager()
-
-
         """Initialize the CLI with core components."""
         try:
             logger.debug("Initializing CLI components")
-
             self.config = DEFAULT_CONFIG.copy()
             if config:
                 self.config.update(config)
 
             self.compressor = SemanticCompressor()
-            self.store = ContextStore()
+            # Replace ContextStore with ContextManager
+            self.context_manager = ContextManager()
+            self.store = self.context_manager.store  # Keep for backward compatibility
 
             api_key = os.getenv('ANTHROPIC_API_KEY')
             if not api_key:
@@ -224,7 +361,8 @@ class ScrambleCLI:
 
             self.client = AnthropicClient(
                 api_key=api_key,
-                compressor=self.compressor
+                compressor=self.compressor,
+                context_manager=self.context_manager
             )
             logger.debug("CLI initialization complete")
 
@@ -232,28 +370,219 @@ class ScrambleCLI:
             logger.error(f"Failed to initialize CLI: {e}")
             raise
 
-    def process_message(self, message: str) -> List[Context]:
+    def debug_context_dates(self):
+        store = ContextStore()
+        for ctx in store.list():
+            print(f"Context {ctx.id[:8]}:")
+            print(f"  timestamp: {ctx.metadata.get('timestamp')}")
+            print(f"  created_at: {getattr(ctx, 'created_at', None)}")
+
+    def _inspect_contexts(self, context_id: Optional[str] = None):
+        """Inspect context files and compare full/compressed versions."""
+        compressed_path = self.store.storage_path
+        full_path = self.store.storage_path / 'full'
+
+        if context_id:
+            # Look at specific context
+            compressed_file = compressed_path / f"{context_id}.ctx"
+            full_file = full_path / f"{context_id}.ctx"
+
+            table = Table(title=f"Context Inspection: {context_id[:8]}")
+            table.add_column("Version", style="cyan")
+            table.add_column("Content", style="green")
+            table.add_column("Metadata", style="yellow")
+
+            if not compressed_file.exists():
+                console.print(f"[red]No compressed context found for ID: {context_id}[/red]")
+                return
+
+            with open(compressed_file, 'rb') as f:
+                compressed = pickle.load(f)
+                table.add_row(
+                    "Compressed",
+                    compressed.text_content[:200] + "...",
+                    str(dict(compressed.metadata))
+                )
+
+            if full_file.exists():
+                with open(full_file, 'rb') as f:
+                    full = pickle.load(f)
+                    table.add_row(
+                        "Full",
+                        full.text_content[:200] + "...",
+                        str(dict(full.metadata))
+                    )
+            else:
+                table.add_row(
+                    "Full",
+                    "[red]Not found[/red]",
+                    f"Should be at: {full_file}"
+                )
+
+            console.print(table)
+
+        else:
+            # Show summary of all contexts
+            table = Table(title="Context Files Overview")
+            table.add_column("Context ID", style="cyan")
+            table.add_column("Compressed File", style="green")
+            table.add_column("Full File", style="yellow")
+            table.add_column("Date/Time", style="blue")
+
+            # Debug directory existence
+            console.print(f"\n[cyan]Directory Check:[/cyan]")
+            console.print(f"Compressed dir exists: {compressed_path.exists()} at {compressed_path}")
+            console.print(f"Full dir exists: {full_path.exists()} at {full_path}\n")
+
+            # Collect all contexts and sort by date
+            contexts = []
+            for ctx_file in compressed_path.glob('*.ctx'):
+                ctx_id = ctx_file.stem
+                full_file = full_path / f"{ctx_id}.ctx"
+
+                with open(ctx_file, 'rb') as f:
+                    compressed = pickle.load(f)
+
+                compressed_status = "Found ✓" if ctx_file.exists() else "Missing ✗"
+                full_status = "Found ✓" if full_file.exists() else "Missing ✗"
+
+                contexts.append({
+                    'id': ctx_id,
+                    'date': compressed.created_at,
+                    'compressed_status': compressed_status,
+                    'compressed_file': ctx_file,
+                    'full_status': full_status,
+                    'full_file': full_file
+                })
+
+            # Sort by date
+            contexts.sort(key=lambda x: x['date'])
+
+            for ctx in contexts:
+                table.add_row(
+                    ctx['id'][:8],
+                    f"{ctx['compressed_status']}\n{ctx['compressed_file'].name}",
+                    f"{ctx['full_status']}\n{ctx['full_file'].name}",
+                    ctx['date'].strftime("%Y-%m-%d %H:%M")
+                )
+
+            console.print(table)
+
+    def _debug_context_selection(self, message: str):
+        """Debug helper to show context selection process with availability status."""
+        # Get all contexts first
+        all_contexts = self.store.list()
+        contexts = self.context_manager.process_message(message)  # This is correct
+
+        table = Table(title=f"Context Selection for: {message}")
+        table.add_column("Context ID", style="dim")
+        table.add_column("Date", style="cyan")
+        table.add_column("Final Score", justify="right")
+        table.add_column("Semantic", justify="right")
+        table.add_column("Tokens", justify="right")
+        table.add_column("Available", style="green")
+        table.add_column("Reason", style="blue")
+
+        # Track cumulative tokens for availability calculation
+        MAX_CONTEXT_TOKENS = 4000
+        cumulative_tokens = 0
+
+        for ctx in sorted(contexts, key=lambda x: x.metadata.get('scoring', {}).get('final_score', 0), reverse=True):
+            scoring = ctx.metadata.get('scoring', {})
+
+            # Calculate availability
+            ctx_tokens = ctx.token_count
+            would_fit = cumulative_tokens + ctx_tokens <= MAX_CONTEXT_TOKENS
+            if scoring.get('final_score', 0) > 0.5:
+                cumulative_tokens += ctx_tokens if would_fit else 0
+
+            available = "✓" if would_fit else "✗"
+            available_style = "green" if would_fit else "red"
+
+            table.add_row(
+                ctx.id[:8],
+                ctx.created_at.strftime("%Y-%m-%d"),
+                f"{scoring.get('final_score', 'N/A'):.3f}",
+                f"{scoring.get('semantic_score', 'N/A'):.3f}",
+                str(ctx_tokens),
+                Text(available, style=available_style),
+                ctx.metadata.get('selection_reason', 'unknown')
+            )
+
+        # Add summary information
+        total_contexts = len(all_contexts)
+        available_contexts = sum(1 for ctx in contexts if ctx.token_count + min(cumulative_tokens, MAX_CONTEXT_TOKENS) <= MAX_CONTEXT_TOKENS)
+
+        summary = Table.grid(padding=1)
+        summary.add_row(f"[cyan]Total contexts searched:[/cyan] {total_contexts}")
+        summary.add_row(f"[cyan]Contexts scored:[/cyan] {len(contexts)}")
+        summary.add_row(f"[cyan]Contexts available to Claude:[/cyan] {available_contexts}")
+        summary.add_row(f"[cyan]Total tokens used:[/cyan] {min(cumulative_tokens, MAX_CONTEXT_TOKENS)}/{MAX_CONTEXT_TOKENS}")
+
+        console.print(summary)
+        console.print(table)
+        # Add summary information
+        total_contexts = len(all_contexts)
+        available_contexts = sum(1 for ctx in contexts if ctx.token_count + min(cumulative_tokens, MAX_CONTEXT_TOKENS) <= MAX_CONTEXT_TOKENS)
+
+        summary = Table.grid(padding=1)
+        summary.add_row(f"[cyan]Total contexts searched:[/cyan] {total_contexts}")
+        summary.add_row(f"[cyan]Contexts scored:[/cyan] {len(contexts)}")
+        summary.add_row(f"[cyan]Contexts available to Claude:[/cyan] {available_contexts}")
+        summary.add_row(f"[cyan]Total tokens used:[/cyan] {min(cumulative_tokens, MAX_CONTEXT_TOKENS)}/{MAX_CONTEXT_TOKENS}")
+
+        console.print(summary)
+        console.print(table)
+
+    def _debug_context_dates(self):
+        """Debug helper to show all context dates."""
+        table = Table(title="Context Dates Debug")
+        table.add_column("Context ID", style="dim")
+        table.add_column("Timestamp")
+        table.add_column("Created At")
+        table.add_column("Source")
+
+        for ctx in self.store.list():
+            timestamp = ctx.metadata.get('timestamp', 'None')
+            created_at = getattr(ctx, 'created_at', 'None')
+            source = "metadata" if 'timestamp' in ctx.metadata else "created_at" if hasattr(ctx, 'created_at') else "missing"
+
+            table.add_row(
+                ctx.id[:8],
+                str(timestamp),
+                str(created_at),
+                source
+            )
+
+        console.print(table)
+
+    def process_message(self, message: str, use_all_contexts: bool = False) -> List[Context]:
         """Process message and select relevant contexts."""
         candidates = []
 
         # Check for temporal references
-        if potential_timeframe := dateparser.parse(message):
+        if dateparser.parse(message):
+            # Use context_manager instead of direct method call
             historical = self.context_manager.find_contexts_by_timeframe(message)
             candidates.extend(historical)
 
-        # Get recent contexts
-        recent = self.store.get_recent_contexts(hours=48)
-        candidates.extend(recent)
+        if use_all_contexts:
+            # Use all available contexts
+            all_contexts = self.store.list()
+            similar = self.compressor.find_similar(message, all_contexts, top_k=10)
+            candidates.extend([ctx for ctx, _, _ in similar])
+        else:
+            # Normal operation with time window
+            recent = self.store.get_recent_contexts(hours=168)
+            candidates.extend(recent)
 
+            # Check for historical reference keywords
+            if any(word in message.lower() for word in ['previous', 'before', 'earlier', 'last time', 'recall']):
+                all_contexts = self.store.list()
+                similar = self.compressor.find_similar(message, all_contexts, top_k=5)
+                candidates.extend([ctx for ctx, _, _ in similar])
 
-        # If we have current context, follow its chain
-        if self.client.current_context:
-            chain = self.context_manager.get_conversation_chain(
-                self.client.current_context.id
-            )
-            candidates.extend(chain)
-
-        # Select within token budget
+        # Use context_manager instead of direct method call
         return self.context_manager.select_contexts(message, candidates)
 
     def _show_welcome(self):
@@ -299,6 +628,7 @@ class ScrambleCLI:
             logger.error(f"Error showing welcome message: {e}")
             console.print(Panel(str(e), title="Error", border_style="red"))
 
+
     def _get_relevant_contexts(self) -> List[Context]:
         """Get relevant contexts for current conversation."""
         try:
@@ -306,11 +636,11 @@ class ScrambleCLI:
             max_contexts = self.config['context']['max_contexts']
 
             # Start with chain contexts if we have current context
+
             if self.client.current_context:
-                chain = self.store.get_conversation_chain(
-                    self.client.current_context.id,
+                chain = self.context_manager.get_conversation_chain(
+                    self.client.current_context.id
                 )
-                contexts.extend(chain)
 
             # Get recent contexts, leaving room for semantic matches
             remaining = max_contexts - len(contexts)
@@ -342,8 +672,10 @@ class ScrambleCLI:
         table.add_column("Description")
 
         table.add_row(":h, :help", "Show this help message")
+        table.add_row(":inspect [id]", "Inspect context files (optional: specific context ID)")
         table.add_row(":s, :stats", "Show system statistics")
         table.add_row(":c, :contexts", "Show stored contexts")
+        table.add_row(":dates", "Debug context dates")
         table.add_row(":a  :analysis", "Show detailed compression analysis")  # Add this line
         table.add_row(":d", "Toggle debug mode")
         table.add_row(":sim <query>", "Test similarity scoring against all contexts")
@@ -467,10 +799,19 @@ class ScrambleCLI:
                 self._show_help()
             elif command in ['s', 'stats']:
                 self._show_stats()
+            elif command == 'test':
+                if not args:
+                    console.print("[yellow]Usage: :test <message>[/yellow]")
+                else:
+                    self._debug_context_selection(args)
+            elif command == 'inspect':  # Add this section
+                self._inspect_contexts(args if args else None)
             elif command in ['c', 'contexts']:
                 self._show_contexts()
             elif command in ['a', 'analysis']:
                 self._show_compression_analysis()
+            elif command == 'dates':  # Add this new command
+                self._debug_context_dates()
             elif command.startswith('d'):
                 self._toggle_debug(command)
             elif command == 'sim':  # New command
@@ -561,14 +902,12 @@ class ScrambleCLI:
             logger.error(f"Error showing compression analysis: {e}")
             console.print("[red]Failed to generate analysis[/red]")
 
-
     def start_interactive(self):
         """Start interactive chat session."""
         self._show_welcome()
 
         while True:
             try:
-                # Get timestamp for prompt
                 timestamp = datetime.now().strftime("%H:%M")
                 user_input = click.prompt(
                     f'[{timestamp}]',
@@ -580,56 +919,37 @@ class ScrambleCLI:
                     console.print("\n[dim]Goodbye! Contexts saved.[/dim]")
                     break
 
-                # Handle special commands
                 if user_input.startswith(':'):
                     self._handle_command(user_input[1:])
                     continue
 
-                # Process message and get response
-                with console.status("[bold blue]Thinking...", spinner="dots"):
-                    # Get contexts using process_message
-                    contexts = self.process_message(user_input)
+                # Add logging here
+                logger.debug("Processing message...")
 
-                    # Send message to Claude
+                with console.status("[bold blue]Thinking...", spinner="dots"):
+                    # Log each step
+                    logger.debug("Getting contexts...")
+                    contexts = self.process_message(user_input)
+                    logger.debug(f"Found {len(contexts)} relevant contexts")
+
+                    logger.debug("Sending to Claude...")
                     result = self.client.send_message(
                         message=user_input,
                         contexts=contexts
                     )
-
-                    # Record stats
-                    global_stats.record_token_usage(
-                        input_tokens=result['usage']['input_tokens'],
-                        output_tokens=result['usage']['output_tokens'],
-                        context_tokens=result['usage'].get('context_tokens', 0)
-                    )
+                    logger.debug("Got response from Claude")
 
                     # Store new context with chain linking
                     if self.client.current_context:
+                        logger.debug("Storing new context...")
                         result['context'].metadata['parent_context'] = \
                             self.client.current_context.id
-                    self.store.add(result['context'])
+                        self.store.add(result['context'])
+                        logger.debug("Context stored")
 
                     # Show response
                     console.print("\n[bold cyan]Claude:[/bold cyan]")
                     console.print(Markdown(result['response']))
-
-                    # Show debug info if enabled
-                    if logger.level == logging.DEBUG:
-                        usage = result['usage']
-                        stats = Table.grid()
-                        stats.add_row(
-                            "[dim]Tokens:[/dim]",
-                            f"[blue dim]in: {usage['input_tokens']}[/blue dim]",
-                            f"[blue dim]out: {usage['output_tokens']}[/blue dim]"
-                        )
-                        if contexts:  # Changed from all_contexts to contexts
-                            stats.add_row(
-                                "[dim]Contexts:[/dim]",
-                                f"[blue dim]{len(contexts)} used[/blue dim]"  # Changed from all_contexts to contexts
-                            )
-                        console.print(stats)
-
-                    console.print()
 
             except KeyboardInterrupt:
                 console.print("\n[dim]Goodbye! Contexts saved.[/dim]")

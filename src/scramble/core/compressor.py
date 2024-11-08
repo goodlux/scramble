@@ -11,41 +11,41 @@ from nltk.tokenize import sent_tokenize
 import os
 import zipfile
 
-# NTLK tokenizer data path settings
-nltk_data_path = './data/nltk_data'
-# Define the path to the punkt.zip zipped data file
-punkt_tab_zip_file = './data/nltk_data/tokenizers/punkt_tab.zip'
-
-# Extract the punkt.zip file if it hasn't been extracted yet
-if not os.path.exists(os.path.join(nltk_data_path, 'tokenizers', 'punkt_tab')):
-    with zipfile.ZipFile(punkt_zip_file, 'r') as zip_ref:
-        zip_ref.extractall(nltk_data_path)
-
-# Set the NLTK data path to the directory where you extracted the punkt data
-nltk.data.path.append(nltk_data_path)
+# Download NLTK tokenizer data // punkt_tab deprecated use punkt instead
+nltk.download('punkt_tab')
 
 logger = logging.getLogger(__name__)
 
 class CompressionLevel:
     """Compression level settings."""
     LOW = {
-        'chunk_size': 128,
-        'min_sentence_length': 10,
-        'semantic_threshold': 0.8,
-        'text_length_multiplier': 1.0  # For dynamic chunk size adjustment
+        'chunk_size': 265,           # Much larger chunks
+        'min_sentence_length': 15,   # Longer sentences
+        'semantic_threshold': 0.95,  # Higher similarity requirement
+        'text_length_multiplier': 0.9,
+        'combine_threshold': 0.8     # More likely to combine chunks
     }
     MEDIUM = {
-        'chunk_size': 64,
-        'min_sentence_length': 5,
+        'chunk_size': 64,           # Medium chunks
+        'min_sentence_length': 5,    # Medium sentences
         'semantic_threshold': 0.7,
-        'text_length_multiplier': 0.75
+        'text_length_multiplier': 0.75,
+        'combine_threshold': 0.7
     }
     HIGH = {
-        'chunk_size': 32,
-        'min_sentence_length': 3,
-        'semantic_threshold': 0.6,
-        'text_length_multiplier': 0.5
+        'chunk_size': 16,            # Very small chunks #
+        'min_sentence_length': 2,    # Short sentences
+        'semantic_threshold': 0.3,  # Lower threshold
+        'text_length_multiplier': 0.25, # Very aggressive
+        'combine_threshold': 0.4
     }
+
+# 1.
+# Notes: Lowered LOW semantic threshold .95 -> .9, text_length_multiplier .9 -> .7 = more meaningful chunks,
+# Notes: HIGH Compression, dropped chunk size to 32->16, 0.27->.25 text_length_multiplier, semantic_threshold 0.4 -> 0.3 = greater compression
+# Notes: No changes to MEDIUM
+# No changes to test, stil failing.
+
 
 class SemanticCompressor:
     """Core compression engine for semantic compression of text."""
@@ -57,6 +57,28 @@ class SemanticCompressor:
         self.chunk_size = chunk_size
         self.set_compression_level('MEDIUM')  # Default to medium compression
 
+    def _handle_short_text(self, cleaned_lines: List[str]) -> List[Dict[str, Any]]:
+        """Process short text into a single chunk."""
+        current_speaker = None
+        content_parts = []
+
+        for line in cleaned_lines:
+            if line.startswith('Human: '):
+                current_speaker = 'Human'
+                content_parts.append(line[7:])
+            elif line.startswith('Assistant: '):
+                current_speaker = 'Assistant'
+                content_parts.append(line[11:])
+            else:
+                content_parts.append(line)
+
+        content = ' '.join(content_parts)
+        return [{
+            'content': content,
+            'speaker': current_speaker,
+            'size': len(content)
+        }]
+
     def set_compression_level(self, level: str):
         """Set compression parameters based on level."""
         if level not in ['LOW', 'MEDIUM', 'HIGH']:
@@ -67,162 +89,158 @@ class SemanticCompressor:
         self.min_sentence_length = settings['min_sentence_length']
         self.semantic_threshold = settings['semantic_threshold']
         self.text_length_multiplier = settings['text_length_multiplier']
+        self.combine_threshold = settings['combine_threshold']
         logger.debug(f"Set compression level to {level}: {settings}")
 
+
+    def _should_combine_chunks(self, chunk1: Dict[str, Any], chunk2: Dict[str, Any]) -> bool:
+        """Determine if two chunks should be combined based on compression level."""
+        # Don't combine across speakers
+        if chunk1['speaker'] != chunk2['speaker']:
+            return False
+
+        combined_size = chunk1['size'] + chunk2['size']
+
+        # Size check based on compression level
+        if combined_size > self.chunk_size * (2 - self.text_length_multiplier):
+            return False
+
+        # Similarity check
+        similarity = self._calculate_similarity(
+            chunk1['content'],
+            chunk2['content']
+        )
+
+        return similarity >= self.combine_threshold
+
+    def split_into_sentences(self, text: str) -> List[str]:
+        """Enhanced sentence splitting based on compression level."""
+        sentences = []
+        current = []
+
+        for i, char in enumerate(text):
+            current.append(char)
+
+            # Check for sentence boundaries based on compression level
+            if char in '.!?' and len(''.join(current).strip()) >= self.min_sentence_length:
+                # HIGH compression: split more aggressively
+                if self.text_length_multiplier <= 0.25:
+                    sentences.append(''.join(current).strip())
+                    current = []
+                # MEDIUM compression: normal sentence splits
+                elif self.text_length_multiplier <= 0.5:
+                    next_char = text[i + 1] if i + 1 < len(text) else ' '
+                    if next_char.isspace():
+                        sentences.append(''.join(current).strip())
+                        current = []
+                # LOW compression: only split on clear sentence boundaries
+                else:
+                    next_char = text[i + 1] if i + 1 < len(text) else ' '
+                    if next_char.isspace() and not any(
+                        text[i+2:i+6].startswith(x) for x in ['and', 'or', 'but']
+                    ):
+                        sentences.append(''.join(current).strip())
+                        current = []
+
+        if current:
+            sentences.append(''.join(current).strip())
+
+        return [s for s in sentences if s]
+
     def _chunk_text(self, text: str) -> List[Dict[str, Any]]:
-        """Split text into manageable chunks with compression settings."""
-        chunks = []
+        """Split text with enhanced compression control."""
+        if not text or not text.strip():
+            return []
+
+        text = text.strip()
         lines = text.split('\n')
-        current_chunk = []
-        current_size = 0
-        current_speaker = None
+        cleaned_lines = [line.strip() for line in lines if line.strip()]
+        chunks = []  # Define chunks at the main function level
 
-        # Dynamic chunk size based on text length and compression settings
-        text_length = len(text)
-        if text_length < 100:  # Very short text
-            adjusted_chunk_size = self.chunk_size
-        elif text_length < 500:  # Medium text
-            adjusted_chunk_size = int(self.chunk_size * self.text_length_multiplier)
-        else:  # Long text
-            adjusted_chunk_size = min(
-                int(self.chunk_size * self.text_length_multiplier),
-                text_length // 150
-            )
+        # Short text handling
+        is_short = (
+            len(cleaned_lines) <= 3 and
+            len(text) < 300 and
+            any(line.startswith(('Human:', 'Assistant:'))
+                for line in cleaned_lines)
+        )
 
+        if is_short:
+            return self._handle_short_text(cleaned_lines)
 
-        # def split_into_sentences(text: str) -> List[str]:## Previous tokenizer, leaving here for reference temporarily.
-        #     """Simple sentence splitter using common punctuation."""
-        #     segments = []
-        #     current = []
+        current_chunk = {
+            'content': [],
+            'speaker': None,
+            'size': 0
+        }
 
-        #     for i, char in enumerate(text):
-        #         current.append(char)
-        #         if char in '.!?' and (i + 1 >= len(text) or text[i + 1].isspace()):
-        #             if len(''.join(current).strip()) >= self.min_sentence_length:
-        #                 segments.append(''.join(current).strip())
-        #             current = []
+        def save_current_chunk():
+            """Helper to save current chunk if not empty."""
+            if current_chunk['content']:
+                chunks.append({
+                    'content': ' '.join(current_chunk['content']),
+                    'speaker': current_chunk['speaker'],
+                    'size': current_chunk['size']
+                })
+                current_chunk['content'] = []
+                current_chunk['size'] = 0
+                # Keep the same speaker
 
-        #     if current and len(''.join(current).strip()) >= self.min_sentence_length:
-        #         segments.append(''.join(current).strip())
-
-        #     return [s for s in segments if s]
-
-        # for line in lines:
-        #     if line.startswith('Human: '):
-        #         if current_chunk:
-        #             chunks.append({
-        #                 'content': ' '.join(current_chunk),
-        #                 'speaker': current_speaker,
-        #                 'size': current_size
-        #             })
-        #             current_chunk = []
-        #             current_size = 0
-        #         current_speaker = 'Human'
-        #         line = line[7:]
-        #     elif line.startswith('Assistant: '):
-        #         if current_chunk:
-        #             chunks.append({
-        #                 'content': ' '.join(current_chunk),
-        #                 'speaker': current_speaker,
-        #                 'size': current_size
-        #             })
-        #             current_chunk = []
-        #             current_size = 0
-        #         current_speaker = 'Assistant'
-        #         line = line[11:]
-
-        #     line = line.strip()
-        #     if not line:
-        #         continue
-
-        #     sentences = split_into_sentences(line)
-        #     for sentence in sentences:
-        #         sentence = sentence.strip()
-        #         if not sentence:
-        #             continue
-
-        #         if (current_size >= adjusted_chunk_size or
-        #             current_size + len(sentence) > adjusted_chunk_size):
-        #             if current_chunk:
-        #                 chunks.append({
-        #                     'content': ' '.join(current_chunk),
-        #                     'speaker': current_speaker,
-        #                     'size': current_size
-        #                 })
-        #             current_chunk = [sentence]
-        #             current_size = len(sentence)
-        #         else:
-        #             current_chunk.append(sentence)
-        #             current_size += len(sentence)
-
-        # if current_chunk:
-        #     chunks.append({
-        #         'content': ' '.join(current_chunk),
-        #         'speaker': current_speaker,
-        #         'size': current_size
-        #     })
-
-        # return chunks
-
-        def split_into_sentences(text: str) -> List[str]:
-            """Use NLTK's sentence tokenizer to split text into sentences."""
-            sentences = sent_tokenize(text)
-            return [s for s in sentences if len(s.strip()) >= self.min_sentence_length]
-
-        for line in lines:
+        for line in cleaned_lines:
+            # Handle speaker changes
             if line.startswith('Human: '):
-                if current_chunk:
-                    chunks.append({
-                        'content': ' '.join(current_chunk),
-                        'speaker': current_speaker,
-                        'size': current_size
-                    })
-                    current_chunk = []
-                    current_size = 0
-                current_speaker = 'Human'
+                save_current_chunk()
+                current_chunk['speaker'] = 'Human'
                 line = line[7:]
             elif line.startswith('Assistant: '):
-                if current_chunk:
-                    chunks.append({
-                        'content': ' '.join(current_chunk),
-                        'speaker': current_speaker,
-                        'size': current_size
-                    })
-                    current_chunk = []
-                    current_size = 0
-                current_speaker = 'Assistant'
+                save_current_chunk()
+                current_chunk['speaker'] = 'Assistant'
                 line = line[11:]
 
             line = line.strip()
             if not line:
                 continue
 
-            sentences = split_into_sentences(line)
+            # Process sentences
+            sentences = self.split_into_sentences(line)
             for sentence in sentences:
                 sentence = sentence.strip()
                 if not sentence:
                     continue
 
-                if (current_size >= adjusted_chunk_size or
-                    current_size + len(sentence) > adjusted_chunk_size):
-                    if current_chunk:
-                        chunks.append({
-                            'content': ' '.join(current_chunk),
-                            'speaker': current_speaker,
-                            'size': current_size
-                        })
-                    current_chunk = [sentence]
-                    current_size = len(sentence)
-                else:
-                    current_chunk.append(sentence)
-                    current_size += len(sentence)
+                # Check if we need to start a new chunk
+                if (current_chunk['size'] >= self.chunk_size or
+                    current_chunk['size'] + len(sentence) > self.chunk_size):
+                    save_current_chunk()
 
-        if current_chunk:
-            chunks.append({
-                'content': ' '.join(current_chunk),
-                'speaker': current_speaker,
-                'size': current_size
-            })
+                current_chunk['content'].append(sentence)
+                current_chunk['size'] += len(sentence)
+
+        # Save final chunk if needed
+        save_current_chunk()
+
+        # Optimize chunks if needed based on compression level
+        if len(chunks) > 1:
+            optimized_chunks = []
+            current = None
+
+            for chunk in chunks:
+                if not current:
+                    current = chunk
+                    continue
+
+                if self._should_combine_chunks(current, chunk):
+                    # Combine chunks
+                    current['content'] += ' ' + chunk['content']
+                    current['size'] += chunk['size']
+                else:
+                    optimized_chunks.append(current)
+                    current = chunk
+
+            if current:
+                optimized_chunks.append(current)
+
+            return optimized_chunks
 
         return chunks
 
@@ -242,7 +260,41 @@ class SemanticCompressor:
 
     def compress(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> Context:
         """Compress text with enhanced metadata and stats tracking."""
+
+        if not text or not text.strip():
+            logger.warning("Received empty or whitespace-only text for compression")
+            return Context(
+                id=str(uuid.uuid4()),
+                embeddings=np.array([]),
+                compressed_tokens=[],
+                metadata={'error': 'empty_input'}
+            )
+
         chunks = self._chunk_text(text)
+
+        # Guard against no valid chunks
+        if not chunks:
+            logger.warning("No valid chunks produced during compression")
+            return Context(
+                id=str(uuid.uuid4()),
+                embeddings=np.array([]),
+                compressed_tokens=[{'content': text, 'speaker': None, 'size': len(text)}],
+                metadata={'error': 'no_chunks_produced'}
+            )
+
+        compressed_length = sum(len(c['content']) for c in chunks)
+
+        # Guard against zero compressed length
+        if compressed_length == 0:
+            logger.warning("Compressed content length is zero")
+            return Context(
+                id=str(uuid.uuid4()),
+                embeddings=np.array([]),
+                compressed_tokens=[{'content': text, 'speaker': None, 'size': len(text)}],
+                metadata={'error': 'zero_compressed_length'}
+            )
+
+
         chunk_texts = [chunk['content'] for chunk in chunks]
         embeddings = self.model.encode(chunk_texts, convert_to_numpy=True)
 
@@ -294,6 +346,7 @@ class SemanticCompressor:
         now = datetime.utcnow()
 
         results = []
+
         for context in contexts:
             chunk_similarities = np.dot(context.embeddings, query_embedding)
             top_chunk_indices = np.argsort(chunk_similarities)[-3:]

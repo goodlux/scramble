@@ -1,0 +1,68 @@
+### Session History Nov 8th 6:34 AM
+
+1. Fixed language/compression chains
+2. Added inspection tools with sorting by date
+3. Fixed `add_with_full` implementation
+4. Added debug logging
+5. Fixed context management in `AnthropicClient`
+
+### Current Issues Found
+1. `:inspect <id>` not finding contexts that we know exist
+2. Older contexts (pre-Nov 6th) not linking properly
+3. Need to verify full/compressed path relationships
+
+### Relevant Files (Core System)
+```
+scramble/src/scramble/core/
+├── api.py         # AnthropicClient, message handling
+├── compressor.py  # SemanticCompressor, compression logic
+├── context.py     # Context dataclass definition
+└── store.py       # ContextStore and ContextManager classes
+```
+
+### Key Interfaces
+```
+scramble/src/scramble/cli/
+└── app.py         # CLI interface, commands, display logic
+```
+
+### Testing
+```
+scramble/tests/
+└── test_SemanticCompressor.py  # Compression level tests
+```
+
+### File Structure for Contexts
+```
+~/.ramble/
+├── store/         # Main storage location
+│   ├── *.ctx     # Compressed contexts
+│   └── full/     # Full versions
+└── store_temp_bak # Backup directories (not important)
+```
+
+### Next Steps
+1. Fix `:inspect` command
+   - Debug path construction
+   - Verify ID matching logic
+   - Add better error reporting
+
+2. Implement full version linking
+   - Create tool to scan and match existing contexts
+   - Verify timestamps and relationships
+   - Add recovery for missing pairs
+
+3. Recompression implementation
+   - Use latest compression optimizations
+   - Preserve metadata and relationships
+   - Add verification steps
+
+4. Add comprehensive debugging
+   - Path verification
+   - Context pair validation
+   - Relationship checking
+
+### Notes
+- Zed IDE shows 81k/200k buffer - interesting insight into context handling
+- Need to verify context ID handling across compressed/full versions
+- Consider adding path validation in inspection tools

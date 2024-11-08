@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, Any, Union, Iterable
 import anthropic
+import pickle
 
 from anthropic.types import (
     Message,
@@ -16,6 +17,7 @@ import logging
 from datetime import datetime, timedelta
 from .context import Context
 from .compressor import SemanticCompressor
+from .store import ContextManager
 
 from .stats import global_stats
 
@@ -29,7 +31,9 @@ class AnthropicClient:
                  api_key: Optional[str] = None,
                  model: str = "claude-3-5-sonnet-latest", # claude-3-5-haiku-latest
                  compressor: Optional[SemanticCompressor] = None,
-                 max_context_messages: int = 10):
+                 max_context_messages: int = 10,
+                context_manager: Optional[ContextManager] = None):
+
         """Initialize the Anthropic client."""
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
@@ -37,6 +41,9 @@ class AnthropicClient:
         self.max_context_messages = max_context_messages
         self.message_history: List[MessageParam] = []
         self.current_context: Optional[Context] = None
+        self.context_manager = context_manager
+
+
 
     def _build_messages_from_context(self, contexts: List[Context]) -> List[MessageParam]:
         """Convert contexts into a list of messages for the API."""
@@ -169,14 +176,39 @@ class AnthropicClient:
                 }
             }
 
-            self.current_context = self.compressor.compress(
+            context = self.compressor.compress(
                 f"Human: {message}\n\nAssistant: {response_text}",
                 metadata=metadata
             )
+            self.current_context = context
+
+            # creates a full version of the context
+            full_context = Context(
+                id=self.current_context.id,  # Use same ID
+                embeddings=self.current_context.embeddings,  # Keep embeddings
+                compressed_tokens=[{
+                    'content': f"Human: {message}\n\nAssistant: {response_text}",
+                    'speaker': None,
+                    'size': len(message) + len(response_text)
+                }],
+                metadata={
+                    **metadata,
+                    'is_full_version': True,
+                    'compressed_id': self.current_context.id
+                }
+            )
+
+            # Save both versions using the context manager's store
+            if self.context_manager:
+                # Save both versions using the context manager's store
+                self.context_manager.store.add_with_full(context)
+                logger.debug("Saved both compressed and full versions")
+            else:
+                logger.warning("No context_manager available - context not saved")
 
             return {
                 'response': response_text,
-                'context': self.current_context,
+                'context': context,
                 'used_contexts': contexts,
                 'usage': metadata['usage']
             }

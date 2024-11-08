@@ -25,6 +25,7 @@ dependencies = [
     "sentence-transformers>=2.0.0",
     "datetime",
     "dateparse",
+    "nltk>=3.8.2",
 ]
 
 [project.scripts]

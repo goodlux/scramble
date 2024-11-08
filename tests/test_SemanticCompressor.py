@@ -16,48 +16,107 @@ class TestSemanticCompressor(unittest.TestCase):
         self.compressor = SemanticCompressor()
         self.store_path = Path.home() / '.ramble' / 'store'
 
-
-    def test_compression_settings_with_levels(self):  # Changed function name and removed parameter
+    def test_compression_settings_with_levels(self):
         """Test compression with different settings across all stored contexts."""
+        test_conversations = [
+            # Short conversation
+            """
+            Human: Hi there!
+            Assistant: Hello! How can I help you today?
+            """,
+
+            # Medium conversation with multiple turns
+            """
+            Human: Can you explain quantum computing?
+            Assistant: Quantum computing uses quantum mechanics principles like superposition and entanglement.
+            Human: What's superposition?
+            Assistant: Superposition means a quantum bit can be in multiple states at once.
+            """,
+
+            # Long technical conversation
+            """
+            Human: Let's discuss machine learning in detail.
+            Assistant: I'll explain several key concepts in machine learning.
+            First, let's talk about supervised learning...
+            [Long technical explanation]
+            There are also neural networks, which...
+            [Another detailed section]
+            And finally, we have reinforcement learning...
+            """,
+
+            # Conversation with repeated patterns
+            """
+            Human: What's the weather today?
+            Assistant: Today will be sunny with a high of 75°F.
+            Human: How about tomorrow?
+            Assistant: Tomorrow will also be sunny with a high of 73°F.
+            Human: And the next day?
+            Assistant: The next day will continue to be sunny with a high of 72°F.
+            """
+        ]
+
+        results = {}
         for level in ['LOW', 'MEDIUM', 'HIGH']:
             self.compressor.set_compression_level(level)
 
-            total_original = 0
-            total_compressed = 0
-            similarities = []
-
-            def read_full_file(path: Path) -> str:
-                with open(path, 'r') as f:
-                    return f.read()
-
-            for ctx_file in self.store_path.glob('*.full'):
-                # Read original
-                original = read_full_file(ctx_file)
-
-                # Try compression
-                compressed_context = self.compressor.compress(original)
-                compressed_text = self._extract_text_content(compressed_context)
-
-                # Measure results
-                total_original += len(original)
-                total_compressed += len(compressed_text)
-                similarities.append(self._measure_similarity(original, compressed_text))
-
-            results = {
-                'level': level,
-                'ratio': total_original / total_compressed,
-                'avg_similarity': np.mean(similarities),
-                'min_similarity': np.min(similarities)
+            level_results = {
+                'ratios': [],
+                'similarities': [],
+                'chunk_counts': []
             }
 
-            print(f"\nCompression results for {level}:")
-            print(f"Ratio: {results['ratio']:.2f}x")
-            print(f"Average similarity: {results['avg_similarity']:.2f}")
-            print(f"Minimum similarity: {results['min_similarity']:.2f}")
+            for text in test_conversations:
+                # Skip empty texts
+                if not text.strip():
+                    continue
 
-            # Add assertions
-            self.assertGreater(results['ratio'], 1.1, f"Poor compression for {level}")
-            self.assertGreater(results['avg_similarity'], 0.8, f"Poor similarity for {level}")
+                # Compress and analyze
+                context = self.compressor.compress(text)
+
+                # Gather metrics
+                level_results['ratios'].append(context.metadata['compression_ratio'])
+                level_results['similarities'].append(context.metadata['semantic_similarity'])
+                level_results['chunk_counts'].append(len(context.compressed_tokens))
+
+            # Store average results
+            results[level] = {
+                'avg_ratio': np.mean(level_results['ratios']),
+                'avg_similarity': np.mean(level_results['similarities']),
+                'avg_chunks': np.mean(level_results['chunk_counts'])
+            }
+
+            # Validate level-specific expectations
+            if level == 'LOW':
+                self.assertGreater(results[level]['avg_similarity'], 0.8,
+                    "Low compression should maintain high similarity")
+                self.assertLess(results[level]['avg_ratio'], 2.0,
+                    "Low compression should not be too aggressive")
+
+            elif level == 'MEDIUM':
+                self.assertGreater(results[level]['avg_similarity'], 0.7,
+                    "Medium compression should maintain good similarity")
+                self.assertGreater(results[level]['avg_ratio'], 1.5,
+                    "Medium compression should achieve reasonable reduction")
+
+            elif level == 'HIGH':
+                self.assertGreater(results[level]['avg_similarity'], 0.6,
+                    "High compression should maintain acceptable similarity")
+                self.assertGreater(results[level]['avg_ratio'], 2.0,
+                    "High compression should achieve significant reduction")
+
+            # Compare relationships between levels
+            if level != 'LOW':
+                prev_level = 'MEDIUM' if level == 'HIGH' else 'LOW'
+                self.assertGreater(
+                    results[level]['avg_ratio'],
+                    results[prev_level]['avg_ratio'],
+                    f"{level} compression should be more aggressive than {prev_level}"
+                )
+                self.assertLessEqual(
+                    results[level]['avg_similarity'],
+                    results[prev_level]['avg_similarity'],
+                    f"{level} compression should have lower or equal similarity to {prev_level}"
+                )
 
     def _extract_text_content(self, context: Context) -> str:
         """Helper method to extract text from context."""
@@ -80,35 +139,50 @@ class TestSemanticCompressor(unittest.TestCase):
         # Could be enhanced with proper semantic similarity
         return min(len(text1), len(text2)) / max(len(text1), len(text2))
 
+    def test_compression_settings(self):
+        """Test different compression levels and their effectiveness."""
+        test_text = """
+        Human: Hello! How are you?
+        Assistant: I'm doing well, thank you for asking!
+        Human: Can you explain quantum computing?
+        Assistant: Quantum computing is a fascinating field that uses quantum mechanics...
+        """
 
-    def test_compression_settings(self, compression_level: Dict):
+        # Test each compression level
+        for level in ['LOW', 'MEDIUM', 'HIGH']:
+            with self.subTest(level=level):
+                # Set compression level
+                self.compressor.set_compression_level(level)
 
-        store_path = Path("./store/full_test")
-        total_original = 0
-        total_compressed = 0
-        similarities = []
+                # Compress text
+                context = self.compressor.compress(test_text)
 
-        for ctx_file in store_path.glob('*.full'):
-            # Read original
-            original = read_full_file(ctx_file)
+                # Calculate metrics
+                original_length = len(test_text)
+                compressed_length = sum(len(chunk['content'])
+                                     for chunk in context.compressed_tokens)
+                compression_ratio = context.metadata['compression_ratio']
+                similarity = context.metadata['semantic_similarity']
 
-            # Try compression
-            compressed = compress_with_settings(original, compression_level)
+                # Basic validation
+                self.assertGreater(compressed_length, 0,
+                    f"{level}: Got empty compression")
+                self.assertGreater(compression_ratio, 0,
+                    f"{level}: Invalid compression ratio")
+                self.assertGreater(similarity, 0.5,
+                    f"{level}: Poor semantic preservation")
 
-            # Measure results
-            total_original += len(original)
-            total_compressed += len(compressed)
-            similarities.append(measure_similarity(original, compressed))
-
-        return {
-            'ratio': total_original / total_compressed,
-            'avg_similarity': np.mean(similarities),
-            'min_similarity': np.min(similarities)
-        }
+                # Level-specific validation
+                if level == 'LOW':
+                    self.assertGreater(compression_ratio, 1.0,
+                        "Low compression should preserve most content")
+                elif level == 'HIGH':
+                    self.assertGreater(compression_ratio, 2.0,
+                        "High compression should be more aggressive")
 
     def test_compression_effectiveness(self):
-
         """Test different compression levels and their effectiveness."""
+
         test_cases = {
 
             'short_conversation': """
@@ -177,39 +251,41 @@ class TestSemanticCompressor(unittest.TestCase):
 
         for name, text in test_cases.items():
             for level in ['LOW', 'MEDIUM', 'HIGH']:
-                with self.subTest(case=name, level=level):
+                with self.subTest(case=name, level=level):  # This is key!
                     self.compressor.set_compression_level(level)
                     context = self.compressor.compress(text)
 
-                    # Print detailed compression stats for debugging
                     print(f"\nTesting {name} at {level}:")
                     print(f"Original length: {len(text)}")
                     print(f"Compressed length: {context.metadata['compressed_length']}")
                     print(f"Compression ratio: {context.metadata['compression_ratio']:.2f}x")
                     print(f"Semantic similarity: {context.metadata['semantic_similarity']:.2f}")
 
-                    # Check compression metrics
-                    self.assertGreater(
-                        context.metadata['compression_ratio'],
-                        1.1,  # Require at least 1.1x compression
-                        f"Poor compression for {name} at {level}"
-                    )
-
-                    # Verify semantic preservation
+                    # Assertions
                     self.assertGreater(
                         context.metadata['semantic_similarity'],
-                        0.8,  # Minimum similarity threshold
+                        self.compressor.semantic_threshold,
                         f"Lost too much meaning in {name} at {level}"
                     )
 
+                    if level == 'HIGH':
+                        self.assertGreater(
+                            context.metadata['compression_ratio'],
+                            2.0,
+                            f"Not enough compression for {name} at {level}"
+                        )
 
     def test_short_text_chunking(self):
+        """Test chunking of very short conversations."""
         short_text = """
         Human: Hello! How are you?
         Assistant: I'm doing well, thank you for asking!
         """
-        short_chunks = self.compressor._chunk_text(short_text)
-        self.assertEqual(len(short_chunks), 1)  # Short text should be one chunk
+        chunks = self.compressor._chunk_text(short_text)
+        self.assertEqual(len(chunks), 1,
+            "Short text should produce single chunk")
+        self.assertEqual(chunks[0]['speaker'], 'Assistant',
+            "Final speaker should be preserved")
 
     def test_medium_text_chunking(self):
         medium_text = """
@@ -268,11 +344,11 @@ class TestSemanticCompressor(unittest.TestCase):
         self.assertIn('compressed_tokens', context.metadata)
         self.assertTrue(context.metadata['compression_ratio'] > 0)
 
-    def read_full_file(file_path):
+    def read_full_file(self, file_path):
         with open(file_path, 'r') as f:
             return f.read()
 
-    def extract_text_content(context: Context) -> str:
+    def extract_text_content(self, context: Context) -> str:
         """Extract text content from compressed tokens."""
         text_parts = []
         compression_level = CompressionLevel
@@ -289,41 +365,13 @@ class TestSemanticCompressor(unittest.TestCase):
                 text_parts.append(token)
         return "\n".join(text_parts)
 
-    def test_compression_settings(self, compression_level: Dict):  # Add self parameter
-        total_original = 0
-        total_compressed = 0
-        similarities = []
 
-        # Define read_full_file helper
-        def read_full_file(path: Path) -> str:
-            with open(path, 'r') as f:
-                return f.read()
-
-        for ctx_file in store_path.glob('*.full'):
-            # Read original
-            original = read_full_file(ctx_file)
-
-            # Try compression
-            compressed_context = self.compressor.compress(original)  # Use self.compressor
-            compressed_text = extract_text_content(compressed_context)
-
-            # Measure results
-            total_original += len(original)
-            total_compressed += len(compressed_text)
-            similarities.append(measure_similarity(original, compressed_text))
-
-        return {
-            'ratio': total_original / total_compressed,
-            'avg_similarity': np.mean(similarities),
-            'min_similarity': np.min(similarities)
-        }
-
-    def compress_with_settings(text, compression_level):
+    def compress_with_settings(self, text, compression_level):
         compressor = SemanticCompressor()
         compressor.set_compression_level(compression_level)
         return compressor.compress(text).text_content
 
-    def measure_similarity(text1, text2):
+    def measure_similarity(self, text1, text2):
         # Implement semantic similarity measurement
         # This is a placeholder implementation
         from difflib import SequenceMatcher

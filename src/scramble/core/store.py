@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union,Tuple
 from pathlib import Path
 import pickle
 import logging
@@ -6,24 +6,19 @@ import dateparser
 from datetime import datetime, timedelta
 import json
 import numpy as np
-from dateparser.conf import Settings
 from .compressor import SemanticCompressor
-
 from .context import Context
 
 logger = logging.getLogger(__name__)
 
 class ContextStore:
-    """Manages storage and retrieval of compressed contexts."""
-
+    """Manages basic storage and retrieval of contexts."""
     def __init__(self, storage_path: Optional[str] = None):
-        """Initialize the context store."""
         self.storage_path = Path(storage_path or Path.home() / '.ramble' / 'store')
         self.contexts: Dict[str, Context] = {}
         self.metadata_file = self.storage_path / 'metadata.json'
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
-        # Try to load metadata, reindex if missing or corrupted
         try:
             self.metadata = self._load_metadata()
             self._load_contexts()
@@ -32,38 +27,18 @@ class ContextStore:
             contexts_found = self.reindex()
             logger.info(f"Reindexed {contexts_found} contexts")
 
-    def get(self, context_id: str) -> Optional[Context]:
-        """Retrieve a context by ID."""
-        return self.contexts.get(context_id)
 
-    def _create_full_file(self, context: Context) -> None:
-        """Create a .full file for the context."""
-        full_path = self.storage_path / 'full' / f"{context.id}.full"
-
-        # Build metadata
-        metadata = {
-            'timestamp': context.created_at.isoformat(),
-            'context_id': context.id,
-            'compression_ratio': context.metadata.get('compression_ratio', 1.0),
-            'parent_context': context.metadata.get('parent_context'),
-            'chain_id': context.metadata.get('chain_id'),
-            'usage': context.metadata.get('usage')
-        }
-
-        # Extract text content
-        text_parts = []
-        for token in context.compressed_tokens:
-            if isinstance(token, dict) and 'content' in token:
-                content = token['content']
-                speaker = token.get('speaker', '')
-                if speaker:
-                    text_parts.append(f"{speaker}: {content}")
-                else:
-                    text_parts.append(content)
-            elif isinstance(token, str):
-                text_parts.append(token)
-
-        text_content = "\n".join(text_parts)
+    def validate_timestamps(self):
+        """Validate and normalize timestamps in all contexts."""
+        for ctx in self.contexts.values():
+            try:
+                timestamp = ctx.metadata.get('timestamp')
+                if isinstance(timestamp, str):
+                    ctx.metadata['timestamp'] = datetime.fromisoformat(timestamp)
+                if not hasattr(ctx, 'created_at'):
+                    ctx.created_at = ctx.metadata.get('timestamp') or datetime.utcnow()
+            except (ValueError, AttributeError) as e:
+                logger.error(f"Invalid timestamp in context {ctx.id}: {e}")
 
     def _load_metadata(self) -> Dict[str, Any]:
         """Load or create store metadata."""
@@ -82,8 +57,8 @@ class ContextStore:
             'created_at': datetime.utcnow().isoformat(),
             'last_interaction': datetime.utcnow().isoformat(),
             'conversation_count': 0,
-            'context_groups': {},  # Group related contexts
-            'context_chains': []   # Track conversation chains
+            'context_chains': [],
+            'current_context_id': None
         }
         self._save_metadata(metadata)
         return metadata
@@ -101,7 +76,6 @@ class ContextStore:
                 try:
                     with open(context_file, 'rb') as f:
                         context = pickle.load(f)
-                        logger.debug(f"Loaded context {context.id[:8]} from {context.created_at}")
                         self.contexts[context.id] = context
                 except Exception as e:
                     logger.error(f"Error loading context from {context_file}: {e}")
@@ -109,124 +83,104 @@ class ContextStore:
 
             logger.info(f"Loaded {len(self.contexts)} contexts")
         except Exception as e:
-            logger.error("Error loading contexts: {e}")
+            logger.error(f"Error accessing context store: {e}")
             raise
 
-    def get_date_range_str(self) -> str:
-        """Get human readable date range of contexts."""
-        try:
-            dates = [
-                datetime.fromisoformat(ctx.metadata['timestamp'])
-                for ctx in self.contexts.values()
-                if 'timestamp' in ctx.metadata
-            ]
+    def _get_chain(self, context_id: str) -> List[Context]:
+        """Internal method to get chain contexts."""
+        logger.debug(f"Getting chain for context {context_id[:8]}")
+        chain = []
+        visited = set()
+        current_id = context_id
 
-            if not dates:
-                return "No dated contexts"
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            context = self.contexts.get(current_id)
 
-            oldest = min(dates)
-            newest = max(dates)
+            if not context:
+                logger.debug(f"Chain broken - context {current_id[:8]} not found")
+                break
 
-            return f"{oldest.strftime('%Y-%m-%d')} to {newest.strftime('%Y-%m-%d')}"
-        except Exception as e:
-            logger.error(f"Error calculating date range: {e}")
-            return "Date range unavailable"
+            chain.append(context)
+            current_id = context.metadata.get('parent_context')
+            if current_id:
+                logger.debug(f"Following chain to parent {current_id[:8]}")
+
+        logger.debug(f"Chain complete - found {len(chain)} contexts")
+        return chain[::-1]
 
     def add(self, context: Context) -> None:
         """Store a compressed context."""
         logger.debug(f"Adding context {context.id[:8]}")
         self.contexts[context.id] = context
+        self.metadata['current_context_id'] = context.id
 
-        # Update store metadata
+        # Update metadata
         self.metadata['last_interaction'] = datetime.utcnow().isoformat()
         self.metadata['conversation_count'] += 1
 
-        # Track conversation chains
-        if 'parent_context' in context.metadata:
-            parent_id = context.metadata['parent_context']
+        # Update chain relationships
+        parent_id = context.metadata.get('parent_context')
+        if parent_id:
+            chain_found = False
             for chain in self.metadata['context_chains']:
                 if parent_id in chain:
                     chain.append(context.id)
+                    chain_found = True
                     break
-            else:
+            if not chain_found:
                 self.metadata['context_chains'].append([parent_id, context.id])
         else:
             self.metadata['context_chains'].append([context.id])
 
-        # Save context, full file, and metadata
+        # Save to disk
         try:
-            # Save binary context
             context_path = self.storage_path / f"{context.id}.ctx"
             with open(context_path, 'wb') as f:
                 pickle.dump(context, f)
-
-            # Create human-readable version
-            self._create_full_file(context)
-
-            # Save metadata
             self._save_metadata(self.metadata)
             logger.debug(f"Saved context to {context_path}")
-
         except Exception as e:
             logger.error(f"Error saving context {context.id[:8]}: {e}")
             raise
 
-    def get_recent_contexts(self,
-                          hours: int = 72,
-                          limit: Optional[int] = None) -> List[Context]:
-        """Get contexts from recent conversations."""
+    def get_recent_contexts(self, hours: int = 48, limit: Optional[int] = None) -> List[Context]:
         cutoff = datetime.utcnow() - timedelta(hours=hours)
-        recent = [
-            ctx for ctx in self.contexts.values()
-            if ctx.created_at > cutoff
-        ]
-        recent.sort(key=lambda x: x.created_at, reverse=True)
-        return recent[:limit] if limit else recent
+        recent = []
 
-    def get_conversation_chain(self, context_id: str) -> List[Context]:
-        """Get ordered contexts in the same conversation chain."""
-        for chain in self.metadata['context_chains']:
-            if context_id in chain:
-                return [
-                    self.contexts[cid]
-                    for cid in chain
-                    if cid in self.contexts
-                ]
-        return []
-
-    def reindex(self):
-        """Rebuild index from existing context files."""
-        contexts = {}
-        chains = []
-
-        # Load all context files
-        for ctx_file in self.storage_path.glob('*.ctx'):
+        for ctx in self.contexts.values():
             try:
-                with open(ctx_file, 'rb') as f:
-                    context = pickle.load(f)
-                    contexts[context.id] = context
+                # Try multiple timestamp sources in order
+                timestamp = None
 
-                    # Reconstruct chains from parent_context metadata
-                    if 'parent_context' in context.metadata:
-                        chains.append([
-                            context.metadata['parent_context'],
-                            context.id
-                        ])
+                # Try metadata timestamp
+                if 'timestamp' in ctx.metadata:
+                    if isinstance(ctx.metadata['timestamp'], datetime):
+                        timestamp = ctx.metadata['timestamp']
+                    elif isinstance(ctx.metadata['timestamp'], str):
+                        timestamp = datetime.fromisoformat(ctx.metadata['timestamp'])
+
+                # Fall back to created_at
+                if not timestamp and hasattr(ctx, 'created_at'):
+                    timestamp = ctx.created_at
+
+                # Last resort: current time
+                if not timestamp:
+                    timestamp = datetime.utcnow()
+                    logger.warning(f"No valid timestamp found for context {ctx.id}")
+
+                if timestamp > cutoff:
+                    recent.append(ctx)
+
             except Exception as e:
-                logger.error(f"Error loading {ctx_file}: {e}")
+                logger.error(f"Error processing context {ctx.id}: {e}")
+                continue
 
-        # Rebuild metadata
-        self.metadata = {
-            'contexts': contexts,
-            'chains': chains,
-            'last_reindex': datetime.utcnow().isoformat()
-        }
-
-        return len(contexts)
+        recent.sort(key=lambda x: x.metadata.get('timestamp', datetime.min), reverse=True)
+        return recent[:limit] if limit else recent
 
     def get_conversation_summary(self) -> Dict[str, Any]:
         """Get summary of conversation history."""
-        now = datetime.utcnow()
         return {
             'total_contexts': len(self.contexts),
             'total_conversations': self.metadata['conversation_count'],
@@ -239,52 +193,168 @@ class ContextStore:
         """List all stored contexts."""
         return list(self.contexts.values())
 
-    def clear(self) -> None:
-        """Clear all contexts from storage."""
-        logger.warning("Clearing all contexts from store")
-        for context_file in self.storage_path.glob('*.ctx'):
-            context_file.unlink()
-        self.contexts.clear()
-        # Reset metadata but keep store creation time
-        created_at = self.metadata['created_at']
-        self.metadata = self._create_metadata()
-        self.metadata['created_at'] = created_at
+    def reindex(self) -> int:
+        """Rebuild context index and chain relationships."""
+        logger.info("Starting reindex operation")
+        contexts = {}
+        parent_map = {}
+        chains = []
+
+        # Load contexts and build parent map
+        for ctx_file in self.storage_path.glob('*.ctx'):
+            try:
+                with open(ctx_file, 'rb') as f:
+                    context = pickle.load(f)
+                    contexts[context.id] = context
+                    parent_id = context.metadata.get('parent_context')
+                    if parent_id:
+                        if parent_id not in parent_map:
+                            parent_map[parent_id] = []
+                        parent_map[parent_id].append(context.id)
+            except Exception as e:
+                logger.error(f"Error loading {ctx_file}: {e}")
+
+        # Rebuild chains
+        processed = set()
+
+        def build_chain(start_id: str) -> List[str]:
+            if start_id in processed:
+                return []
+            chain = [start_id]
+            processed.add(start_id)
+            children = sorted(
+                parent_map.get(start_id, []),
+                key=lambda x: contexts[x].created_at
+            )
+            for child_id in children:
+                chain.extend(build_chain(child_id))
+            return chain
+
+        # Build chains from roots
+        for ctx_id in contexts:
+            if ctx_id not in processed:
+                parent_id = contexts[ctx_id].metadata.get('parent_context')
+                if not parent_id or parent_id not in contexts:
+                    chain = build_chain(ctx_id)
+                    if chain:
+                        chains.append(chain)
+
+        # Update store state
+        self.contexts = contexts
+        self.metadata['context_chains'] = chains
+        self.metadata['conversation_count'] = len(contexts)
         self._save_metadata(self.metadata)
+
+        return len(contexts)
+
+    def get_date_range(self) -> Tuple[datetime, datetime]:
+        """Get date range of all contexts."""
+        dates = []
+        for ctx in self.contexts.values():
+            timestamp = ctx.metadata.get('timestamp')
+            if timestamp:
+                try:
+                    if isinstance(timestamp, str):
+                        dates.append(datetime.fromisoformat(timestamp))
+                    else:
+                        dates.append(timestamp)
+                except (ValueError, TypeError):
+                    dates.append(ctx.created_at)
+            else:
+                dates.append(ctx.created_at)
+
+        if not dates:
+            now = datetime.utcnow()
+            return (now, now)
+
+        return (min(dates), max(dates))
+
+    def get_date_range_str(self) -> str:
+        """Get human readable date range string."""
+        start, end = self.get_date_range()
+        return f"{start.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')}"
+
+    def add_with_full(self, context: Context) -> None:
+        """Store both compressed and full versions of a context."""
+        logger.debug(f"Starting add_with_full for context {context.id[:8]}")
+
+        # Log paths before saving
+        full_dir = self.storage_path / 'full'
+        logger.debug(f"Full directory path: {full_dir}")
+        logger.debug(f"Full directory exists: {full_dir.exists()}")
+
+        # Save compressed version normally
+        self.add(context)
+        logger.debug(f"Saved compressed version")
+
+        # Create and verify full directory
+        full_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Created/verified full directory")
+
+        # Create full version
+        full_context = Context(
+            id=context.id,
+            embeddings=context.embeddings,
+            compressed_tokens=[{
+                'content': context.text_content,
+                'speaker': None,
+                'size': len(context.text_content)
+            }],
+            metadata={
+                **context.metadata,
+                'is_full_version': True,
+                'original_id': context.id
+            },
+            created_at=context.created_at,
+            updated_at=context.updated_at
+        )
+
+        try:
+            context_path = full_dir / f"{context.id}.ctx"
+            logger.debug(f"Attempting to save full context to {context_path}")
+            with open(context_path, 'wb') as f:
+                pickle.dump(full_context, f)
+            logger.debug(f"Successfully saved full context")
+        except Exception as e:
+            logger.error(f"Error saving full context {context.id[:8]}: {e}")
+            raise
+
+        # Save full version
+        full_path = self.storage_path / 'full'
+        full_path.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Created full directory at {full_path}")
+
+        try:
+            context_path = full_path / f"{context.id}.ctx"
+            with open(context_path, 'wb') as f:
+                pickle.dump(full_context, f)
+            logger.debug(f"Successfully saved full context to {context_path}")
+        except Exception as e:
+            logger.error(f"Error saving full context {context.id[:8]}: {e}")
+            raise
 
 
 class ContextManager:
+    """Handles higher-level context operations and chain management."""
     def __init__(self, store_path: Optional[str] = None):
-            self.store = ContextStore(store_path)
-            self.max_tokens = 4000  # Configurable token budget
-            # Add the compressor
-            self.compressor = SemanticCompressor()  # Make sure to import SemanticCompressor
+        self.store = ContextStore(store_path)
+        self.max_tokens = 4000
+        self.compressor = SemanticCompressor()
 
-    def process_message(self, message: str) -> List[Context]:
-        """Process message and select relevant contexts."""
-        candidates = []
+        # Add scoring configuration
+        self.scoring_config = {
+            'recency_weight': 0.05,
+            'chain_bonus': 0.4,
+            'decay_days': 14
+        }
 
-        # Check for temporal references
-        if dateparser.parse(message):
-            historical = self.find_contexts_by_timeframe(message)
-            candidates.extend(historical)
-
-        # Get recent contexts
-        recent = self.store.get_recent_contexts(hours=48)
-        candidates.extend(recent)
-
-        # If we have current context, follow its chain
-        current_id = self.store.metadata.get('current_context_id')
-        if current_id:
-            chain = self.get_conversation_chain(current_id)
-            candidates.extend(chain)
-
-        # Select within token budget
-        return self.select_contexts(message, candidates)
+    def get_conversation_chain(self, context_id: str) -> List[Context]:
+        """Public method to access conversation chains."""
+        return self.store._get_chain(context_id)
 
     def find_contexts_by_timeframe(self, query: str) -> List[Context]:
         """Find contexts using natural language time reference."""
         try:
-            # Use a simple dictionary with basic settings
             timeframe = dateparser.parse(
                 query,
                 settings={
@@ -297,17 +367,15 @@ class ContextManager:
             if not timeframe:
                 return []
 
-            # Add a window around the timeframe (e.g., ±12 hours)
             window_start = timeframe - timedelta(hours=12)
             window_end = timeframe + timedelta(hours=12)
 
-            # Find contexts within the window
             matches = []
             for ctx in self.store.list():
                 try:
                     if window_start <= ctx.created_at <= window_end:
                         matches.append(ctx)
-                except (TypeError, AttributeError) as e:
+                except Exception as e:
                     logger.warning(f"Error comparing context dates: {e}")
                     continue
 
@@ -317,71 +385,113 @@ class ContextManager:
             logger.error(f"Error finding contexts by timeframe: {e}")
             return []
 
-    def get_conversation_chain(self, context_id: str) -> List[Context]:
-        """Get full chain of contexts connected to this one."""
-        chain = []
-        current_id = context_id
-
-        # Follow parent links to build chain
-        while current_id:
-            context = self.store.get(current_id)
-            if not context:
-                break
-
-            chain.append(context)
-            current_id = context.parent_id
-
-        return chain
-
     def select_contexts(self, message: str, candidates: List[Context]) -> List[Context]:
-        """Select contexts within token budget with improved scoring."""
-        scored = []
-        now = datetime.now()
+            """Select contexts within token budget with improved scoring."""
+            if not candidates:
+                return []
 
-        # First, get message embedding once
-        message_embedding = self.compressor.model.encode(message, convert_to_numpy=True)
+            scored = []
+            now = datetime.now()
 
-        for ctx in candidates:
-            score = 0.0
-
-            # Recency score (exponential decay over 7 days)
-            age = (now - ctx.created_at).total_seconds()
-            recency_score = np.exp(-age / (7 * 24 * 3600))
-            score += 0.3 * recency_score
-
-            # Chain relationship score (boost for related contexts)
-            if ctx.parent_id:
-                chain_contexts = self.store.get_conversation_chain(ctx.id)
-                chain_length = len(chain_contexts)
-                score += 0.2 * min(chain_length / 5, 1.0)  # Cap at 5 contexts
-
-            # Semantic relevance score using existing embeddings
             try:
-                # Use the pre-computed embeddings from the context
-                similarities = np.dot(ctx.embeddings, message_embedding)
-                similarity_score = float(np.mean(similarities))
-                score += 0.5 * similarity_score
-            except (AttributeError, Exception) as e:
-                logger.debug(f"Could not compute similarity: {e}")
+                message_embedding = self.compressor.model.encode(message, convert_to_numpy=True)
+            except Exception as e:
+                logger.error(f"Error computing message embedding: {e}")
+                return []
 
-            scored.append((ctx, score, ctx.token_count))
+            for ctx in candidates:
+                try:
+                    # Initialize score components
+                    recency_score = 0.0
+                    semantic_score = 0.0
+                    chain_bonus = 0.0
 
-        # Sort by score and select within budget
-        scored.sort(key=lambda x: x[1], reverse=True)
+                    # Recency score
+                    age = (now - ctx.created_at).total_seconds()
+                    recency_score = np.exp(-age / (self.scoring_config['decay_days'] * 24 * 3600))
 
-        selected = []
-        total_tokens = 0
+                    # Chain bonus
+                    if ctx.metadata.get('parent_context'):
+                        chain_bonus = self.scoring_config['chain_bonus']
 
-        for ctx, score, tokens in scored:
-            if total_tokens + tokens <= self.max_tokens:
-                selected.append(ctx)
-                total_tokens += tokens
+                    # Semantic similarity
+                    if hasattr(ctx, 'embeddings') and ctx.embeddings is not None:
+                        chunk_similarities = np.dot(ctx.embeddings, message_embedding)
+                        top_chunk_scores = np.sort(chunk_similarities)[-3:]
+                        semantic_score = float(np.mean(top_chunk_scores))
 
-                # Always include direct parent contexts
-                if ctx.parent_id and total_tokens + tokens <= self.max_tokens:
-                    parent = self.store.get(ctx.parent_id)
-                    if parent and parent not in selected:
-                        selected.append(parent)
-                        total_tokens += parent.token_count
+                        ctx.metadata['chunk_similarities'] = {
+                            'top_scores': top_chunk_scores.tolist(),
+                            'mean_score': semantic_score
+                        }
 
-        return selected
+                    # Calculate final score
+                    final_score = (
+                        (1 - self.scoring_config['recency_weight']) * semantic_score +
+                        self.scoring_config['recency_weight'] * recency_score +
+                        chain_bonus
+                    )
+
+                    # Store scoring details
+                    ctx.metadata['scoring'] = {
+                        'final_score': float(final_score),
+                        'semantic_score': float(semantic_score),
+                        'recency_score': float(recency_score),
+                        'chain_bonus': float(chain_bonus),
+                        'timestamp': now.isoformat(),
+                        'query': message
+                    }
+
+                    scored.append((ctx, final_score, ctx.token_count))
+
+                except Exception as e:
+                    logger.error(f"Error scoring context {ctx.id}: {e}")
+                    continue
+
+            # Sort by score
+            scored.sort(key=lambda x: x[1], reverse=True)
+
+            selected = []
+            total_tokens = 0
+
+            for ctx, score, tokens in scored:
+                if total_tokens + tokens <= self.max_tokens:
+                    ctx.metadata['selection_reason'] = (
+                        'semantic_match' if ctx.metadata.get('scoring', {}).get('semantic_score', 0) > 0.5
+                        else 'chain_bonus' if ctx.metadata.get('scoring', {}).get('chain_bonus', 0) > 0
+                        else 'time_window'
+                    )
+                    selected.append(ctx)
+                    total_tokens += tokens
+
+            return selected
+
+    def process_message(self, message: str) -> List[Context]:
+        """Process message and select relevant contexts."""
+        candidates = []
+
+        # Get all contexts
+        all_contexts = self.store.list()
+
+        # Check for temporal references
+        if dateparser.parse(message):
+            historical = self.find_contexts_by_timeframe(message)
+            candidates.extend(historical)
+
+        # Get semantic matches from all contexts
+        similar = self.compressor.find_similar(message, all_contexts, top_k=10)
+        candidates.extend([ctx for ctx, _, _ in similar])
+
+        # Add recent contexts
+        recent = self.store.get_recent_contexts(hours=168)
+        candidates.extend(recent)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_candidates = []
+        for ctx in candidates:
+            if ctx.id not in seen:
+                seen.add(ctx.id)
+                unique_candidates.append(ctx)
+
+        return self.select_contexts(message, unique_candidates)
