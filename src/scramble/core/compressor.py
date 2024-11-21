@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Optional
 import uuid
 import numpy as np
-from datetime import datetime
+from datetime import datetime, UTC
 import logging
 from sentence_transformers import SentenceTransformer
 from .context import Context
@@ -318,7 +318,7 @@ class SemanticCompressor:
         compression_metadata = {
             'original_length': len(text),
             'compressed_length': sum(len(c['content']) for c in chunks),
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(UTC).isoformat(),
             'compression_ratio': len(text) / sum(len(c['content']) for c in chunks),
             'semantic_similarity': similarity_score,
             'original_tokens': original_tokens,

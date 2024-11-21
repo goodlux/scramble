@@ -1,12 +1,15 @@
 import unittest
 import numpy as np
-from typing import Dict
+import json
+from typing import Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 
+from scramble.core import stats
 from scramble.core.context import Context  # Add this
 from scramble.core.compressor import SemanticCompressor
 from scramble.core.compressor import CompressionLevel
+from tests.utils.results_manager import ResultsManager
 
 # Define store path
 store_path = Path.home() / '.ramble' / 'store'
@@ -15,6 +18,8 @@ class TestSemanticCompressor(unittest.TestCase):
     def setUp(self):
         self.compressor = SemanticCompressor()
         self.store_path = Path.home() / '.ramble' / 'store'
+        self.results = ResultsManager()
+
 
     def test_compression_settings_with_levels(self):
         """Test compression with different settings across all stored contexts."""
@@ -55,7 +60,8 @@ class TestSemanticCompressor(unittest.TestCase):
             """
         ]
 
-        results = {}
+        level_results = {}
+
         for level in ['LOW', 'MEDIUM', 'HIGH']:
             self.compressor.set_compression_level(level)
 
@@ -79,44 +85,67 @@ class TestSemanticCompressor(unittest.TestCase):
                 level_results['chunk_counts'].append(len(context.compressed_tokens))
 
             # Store average results
-            results[level] = {
+            avg_results = {
                 'avg_ratio': np.mean(level_results['ratios']),
                 'avg_similarity': np.mean(level_results['similarities']),
                 'avg_chunks': np.mean(level_results['chunk_counts'])
             }
+            self.results.store_level_result(level, avg_results)
+
+
 
             # Validate level-specific expectations
+            current_results = self.results.get_level_result(level)
+
             if level == 'LOW':
-                self.assertGreater(results[level]['avg_similarity'], 0.8,
-                    "Low compression should maintain high similarity")
-                self.assertLess(results[level]['avg_ratio'], 2.0,
-                    "Low compression should not be too aggressive")
+                self.assertGreater(
+                    current_results['avg_similarity'], 0.8,
+                    "Low compression should maintain high similarity"
+                )
+                self.assertLess(
+                    current_results['avg_ratio'], 2.0,
+                    "Low compression should not be too aggressive"
+                )
 
             elif level == 'MEDIUM':
-                self.assertGreater(results[level]['avg_similarity'], 0.7,
-                    "Medium compression should maintain good similarity")
-                self.assertGreater(results[level]['avg_ratio'], 1.5,
-                    "Medium compression should achieve reasonable reduction")
+                self.assertGreater(
+                    current_results['avg_similarity'], 0.7,
+                    "Medium compression should maintain good similarity"
+                )
+                self.assertGreater(
+                    current_results['avg_ratio'], 1.5,
+                    "Medium compression should achieve reasonable reduction"
+                )
 
             elif level == 'HIGH':
-                self.assertGreater(results[level]['avg_similarity'], 0.6,
-                    "High compression should maintain acceptable similarity")
-                self.assertGreater(results[level]['avg_ratio'], 2.0,
-                    "High compression should achieve significant reduction")
+                self.assertGreater(
+                    current_results['avg_similarity'], 0.6,
+                    "High compression should maintain acceptable similarity"
+                )
+                self.assertGreater(
+                    current_results['avg_ratio'], 2.0,
+                    "High compression should achieve significant reduction"
+                )
 
             # Compare relationships between levels
             if level != 'LOW':
+
                 prev_level = 'MEDIUM' if level == 'HIGH' else 'LOW'
+                prev_results = self.results.get_level_result(prev_level)
+
                 self.assertGreater(
-                    results[level]['avg_ratio'],
-                    results[prev_level]['avg_ratio'],
+                    current_results['avg_ratio'],
+                    prev_results['avg_ratio'],
                     f"{level} compression should be more aggressive than {prev_level}"
                 )
                 self.assertLessEqual(
-                    results[level]['avg_similarity'],
-                    results[prev_level]['avg_similarity'],
+                    current_results['avg_similarity'],
+                    prev_results['avg_similarity'],
                     f"{level} compression should have lower or equal similarity to {prev_level}"
                 )
+
+            passed=True  # You might want to calculate this based on assertions
+
 
     def _extract_text_content(self, context: Context) -> str:
         """Helper method to extract text from context."""
@@ -179,6 +208,27 @@ class TestSemanticCompressor(unittest.TestCase):
                 elif level == 'HIGH':
                     self.assertGreater(compression_ratio, 2.0,
                         "High compression should be more aggressive")
+
+                self.results.save_compression_result(
+                                f"compression_settings_{level}",
+                                metrics={
+                                    'level': level,
+                                    'original_length': original_length,
+                                    'compressed_length': compressed_length,
+                                    'compression_ratio': compression_ratio,
+                                    'similarity': similarity
+                                },
+                                expectations={
+                                    'compression_ratio': 2.0 if level == 'HIGH' else 1.0,
+                                    'min_similarity': 0.5
+                                },
+                                passed=all([
+                                    compressed_length > 0,
+                                    compression_ratio > 0,
+                                    similarity > 0.5
+                                ])
+                            )
+
 
     def test_compression_effectiveness(self):
         """Test different compression levels and their effectiveness."""
@@ -249,17 +299,90 @@ class TestSemanticCompressor(unittest.TestCase):
             """
         }
 
+
+
         for name, text in test_cases.items():
             for level in ['LOW', 'MEDIUM', 'HIGH']:
                 with self.subTest(case=name, level=level):  # This is key!
                     self.compressor.set_compression_level(level)
                     context = self.compressor.compress(text)
 
+                    stats = {
+                        'test_case': name,
+                        'compression_level': level,
+                        'original_length': len(text),
+                        'compressed_length': context.metadata['compressed_length'],
+                        'compression_ratio': context.metadata['compression_ratio'],
+                        'semantic_similarity': context.metadata['semantic_similarity'],
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    metrics = {
+                        'test_case': name,
+                        'compression_level': level,
+                        'original_length': len(text),
+                        'compressed_length': context.metadata['compressed_length'],
+                        'compression_ratio': context.metadata['compression_ratio'],
+                        'semantic_similarity': context.metadata['semantic_similarity'],
+                        'num_chunks': len(context.compressed_tokens),
+                        'original_tokens': context.metadata['original_tokens'],
+                        'compressed_tokens': context.metadata['compressed_tokens'],
+                        'token_reduction': context.metadata['original_tokens'] / context.metadata['compressed_tokens'],
+                        'detailed_chunks': [
+                            {
+                                'size': len(chunk['content']),
+                                'speaker': chunk.get('speaker', 'unknown'),
+                                'preview': chunk['content'][:50] + '...' if len(chunk['content']) > 50 else chunk['content']
+                            } for chunk in context.compressed_tokens
+                        ]
+                    }
+
+                    expectations = {
+                        'min_semantic_similarity': self.compressor.semantic_threshold,
+                        'min_compression_ratio': 2.0 if level == 'HIGH' else None,
+                        'expected_thresholds': {
+                            'HIGH': {'similarity': 0.6, 'ratio': 2.0, 'max_chunk_size': 16},
+                            'MEDIUM': {'similarity': 0.7, 'ratio': 1.5, 'max_chunk_size': 64},
+                            'LOW': {'similarity': 0.8, 'ratio': None, 'max_chunk_size': 265}
+                        },
+                        'level_specific': {
+                            'compression_targets': {
+                                'HIGH': 2.0,
+                                'MEDIUM': 1.5,
+                                'LOW': 1.0
+                            },
+                            'similarity_targets': {
+                                'HIGH': 0.6,
+                                'MEDIUM': 0.7,
+                                'LOW': 0.8
+                            }
+                        }
+                    }
+
+                    # Determine if test passed
+                    passed = all([
+                        context.metadata['semantic_similarity'] > self.compressor.semantic_threshold,
+                        context.metadata['semantic_similarity'] >= expectations['expected_thresholds'][level]['similarity'],
+                        level != 'HIGH' or context.metadata['compression_ratio'] > 2.0,
+                        all(len(chunk['content']) <= expectations['expected_thresholds'][level]['max_chunk_size']
+                            for chunk in context.compressed_tokens)
+                    ])
+
+                    # Save results
+                    self.results.save_compression_result(
+                        f"{name}_{level}",
+                        metrics,
+                        expectations,
+                        passed
+                    )
+
+                    # Print summary
                     print(f"\nTesting {name} at {level}:")
                     print(f"Original length: {len(text)}")
                     print(f"Compressed length: {context.metadata['compressed_length']}")
                     print(f"Compression ratio: {context.metadata['compression_ratio']:.2f}x")
                     print(f"Semantic similarity: {context.metadata['semantic_similarity']:.2f}")
+                    print(f"Test passed: {passed}")
 
                     # Assertions
                     self.assertGreater(
@@ -376,6 +499,7 @@ class TestSemanticCompressor(unittest.TestCase):
         # This is a placeholder implementation
         from difflib import SequenceMatcher
         return SequenceMatcher(None, text1, text2).ratio()
+
 
 
 if __name__ == '__main__':

@@ -379,94 +379,53 @@ class ScrambleCLI:
 
     def _inspect_contexts(self, context_id: Optional[str] = None):
         """Inspect context files and compare full/compressed versions."""
-        compressed_path = self.store.storage_path
-        full_path = self.store.storage_path / 'full'
+        try:
+            if context_id:
+                # Look at specific context
+                compressed_path = self.store.storage_path / f"{context_id}.ctx"
+                full_path = self.store.storage_path.parent / 'full' / f"{context_id}.ctx"
 
-        if context_id:
-            # Look at specific context
-            compressed_file = compressed_path / f"{context_id}.ctx"
-            full_file = full_path / f"{context_id}.ctx"
+                # Debug logging
+                logger.debug(f"Inspecting context {context_id}")
+                logger.debug(f"Compressed path: {compressed_path} (exists: {compressed_path.exists()})")
+                logger.debug(f"Full path: {full_path} (exists: {full_path.exists()})")
 
-            table = Table(title=f"Context Inspection: {context_id[:8]}")
-            table.add_column("Version", style="cyan")
-            table.add_column("Content", style="green")
-            table.add_column("Metadata", style="yellow")
+                table = Table(title=f"Context Inspection: {context_id[:8]}", style="cyan")
+                table.add_column("Version", style="blue")
+                table.add_column("Content", style="green")
+                table.add_column("Metadata", style="yellow")
 
-            if not compressed_file.exists():
-                console.print(f"[red]No compressed context found for ID: {context_id}[/red]")
-                return
+                if compressed_path.exists():
+                    logger.debug("Loading compressed context...")
+                    with open(compressed_path, 'rb') as f:
+                        compressed = pickle.load(f)
+                        table.add_row(
+                            "Compressed",
+                            compressed.text_content[:200] + "...",
+                            str(dict(compressed.metadata))
+                        )
+                        logger.debug("Added compressed context to table")
+                else:
+                    logger.debug(f"Compressed context not found at {compressed_path}")
 
-            with open(compressed_file, 'rb') as f:
-                compressed = pickle.load(f)
-                table.add_row(
-                    "Compressed",
-                    compressed.text_content[:200] + "...",
-                    str(dict(compressed.metadata))
-                )
+                if full_path.exists():
+                    logger.debug("Loading full context...")
+                    with open(full_path, 'rb') as f:
+                        full = pickle.load(f)
+                        table.add_row(
+                            "Full",
+                            full.text_content[:200] + "...",
+                            str(dict(full.metadata))
+                        )
+                        logger.debug("Added full context to table")
+                else:
+                    logger.debug(f"Full context not found at {full_path}")
 
-            if full_file.exists():
-                with open(full_file, 'rb') as f:
-                    full = pickle.load(f)
-                    table.add_row(
-                        "Full",
-                        full.text_content[:200] + "...",
-                        str(dict(full.metadata))
-                    )
-            else:
-                table.add_row(
-                    "Full",
-                    "[red]Not found[/red]",
-                    f"Should be at: {full_file}"
-                )
+                console.print(table)
 
-            console.print(table)
-
-        else:
-            # Show summary of all contexts
-            table = Table(title="Context Files Overview")
-            table.add_column("Context ID", style="cyan")
-            table.add_column("Compressed File", style="green")
-            table.add_column("Full File", style="yellow")
-            table.add_column("Date/Time", style="blue")
-
-            # Debug directory existence
-            console.print(f"\n[cyan]Directory Check:[/cyan]")
-            console.print(f"Compressed dir exists: {compressed_path.exists()} at {compressed_path}")
-            console.print(f"Full dir exists: {full_path.exists()} at {full_path}\n")
-
-            # Collect all contexts and sort by date
-            contexts = []
-            for ctx_file in compressed_path.glob('*.ctx'):
-                ctx_id = ctx_file.stem
-                full_file = full_path / f"{ctx_id}.ctx"
-
-                with open(ctx_file, 'rb') as f:
-                    compressed = pickle.load(f)
-
-                compressed_status = "Found ✓" if ctx_file.exists() else "Missing ✗"
-                full_status = "Found ✓" if full_file.exists() else "Missing ✗"
-
-                contexts.append({
-                    'id': ctx_id,
-                    'date': compressed.created_at,
-                    'compressed_status': compressed_status,
-                    'compressed_file': ctx_file,
-                    'full_status': full_status,
-                    'full_file': full_file
-                })
-
-            # Sort by date
-            contexts.sort(key=lambda x: x['date'])
-
-            for ctx in contexts:
-                table.add_row(
-                    ctx['id'][:8],
-                    f"{ctx['compressed_status']}\n{ctx['compressed_file'].name}",
-                    f"{ctx['full_status']}\n{ctx['full_file'].name}",
-                    ctx['date'].strftime("%Y-%m-%d %H:%M")
-                )
-
-            console.print(table)
+        except Exception as e:
+            logger.error(f"Error in inspect contexts: {e}")
+            console.print(f"[red]Error: {e}[/red]")
 
     def _debug_context_selection(self, message: str):
         """Debug helper to show context selection process with availability status."""

@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import numpy as np
 import logging
 from rich.table import Table
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class StatsTracker:
             original_tokens=original_tokens,
             compressed_tokens=compressed_tokens,
             semantic_similarity=similarity_score,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             context_id=context_id
         )
         self.compression_history.append(stats)

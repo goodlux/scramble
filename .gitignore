@@ -5,6 +5,32 @@ __pycache__/
 .venv/
 venv/
 
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+
+# Python stuff
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# ramble install dir
+.ramble/
+
+# test results
+results/
+.results/
+test_results/
+__pycache__/
+*.pyc
+
 # Package/build directories
 dist/
 build/
@@ -26,6 +52,9 @@ store/
 .idea/
 *.swp
 .DS_Store.venv/
+.zed/
+
+
 
 # NLTK data directory (builds when necessary)
 ./data/nltk_data/tokenizers/punkt_tab/

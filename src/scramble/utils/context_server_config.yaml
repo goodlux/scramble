@@ -1,0 +1,22 @@
+servers:
+  - name: shared-tools
+    description: Centralized tool server for multi-agent system
+    type: tool_server
+    host: localhost
+    port: 8765
+    capabilities:
+      - tool_discovery # List and describe tools
+      - tool_suggestion # Help agents pick tools
+      - composable # Tools can be chained
+
+  - name: local-tools
+    description: Default local tool server
+    type: tool_server
+    host: localhost
+    port: 8765
+
+  - name: assistant-server
+    description: Language model context server
+    type: context_server
+    host: localhost
+    port: 8766
