@@ -2,62 +2,50 @@
 __pycache__/
 *.py[cod]
 *$py.class
-.venv/
-venv/
-
-# Environment
-.env
-.venv
-env/
-venv/
-ENV/
-
-
-# Python stuff
-__pycache__/
-*.pyc
 *.pyo
 *.pyd
 .Python
 *.so
 
-# ramble install dir
-.ramble/
+# Virtual Environments
+.env
+.venv/
+env/
+venv/
+ENV/
 
-# test results
-results/
-.results/
-test_results/
-__pycache__/
-*.pyc
-
-# Package/build directories
+# Package/Build
 dist/
 build/
 *.egg-info/
 
-# Model caches
+# Testing and Results
+results/
+.results/
+test_results/
+
+# Model & Data Caches
 .cache/
 .sentence_transformers/
-~/.cache/torch/
-~/.cache/huggingface/
+.cache/torch/
+.cache/huggingface/
 
-# Project specific
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+.zed/
+.ropeproject/
+.mypy_cache/
+
+# Project Specific
 .ramble/
 store/
 *.pkl
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-.DS_Store.venv/
-.zed/
+# NLTK Data
+data/nltk_data/tokenizers/punkt_tab/
 
-
-
-# NLTK data directory (builds when necessary)
-./data/nltk_data/tokenizers/punkt_tab/
-
-# Ignore all .DS_Store files in the project
+# System Files
+.DS_Store
 **/.DS_Store

@@ -1,0 +1,3 @@
+[submodule "llmharness"]
+	path = llmharness
+	url = https://github.com/goodlux/llmharness.git
