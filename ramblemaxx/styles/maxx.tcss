@@ -102,3 +102,43 @@ Tree {
 Tree:focus {
     border: solid #ff003c;
 }
+
+
+Screen {
+    background: #1a1b26;
+}
+
+#main-container {
+    width: 100%;
+    height: 100%;
+}
+
+#ramble-pane {
+    width: 70%;
+    height: 100%;
+    background: #24283b;
+    border: solid #414868;
+}
+
+#side-pane {
+    width: 30%;
+    height: 100%;
+    background: #24283b;
+    border-left: none;
+    border: solid #414868;
+}
+
+#ramble-display {
+    height: 90%;
+    padding: 1;
+}
+
+#ramble-input {
+    height: 3;
+    dock: bottom;
+    margin: 1;
+}
+
+.hidden {
+    display: none;
+}
