@@ -12,24 +12,20 @@ requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
 ]
 dependencies = [
-    "rich",
-    "nltk",
-    "anthropic>=0.18.0",
-    "click",
-    "sentence-transformers",
-    "click>=8.0.0",
-    "numpy>=1.20.0",
-    "sentence-transformers>=2.0.0",
-    "datetime",
-    "dateparser",
-    "nltk>=3.8.2",
+    "rich",            # For CLI formatting
+    "nltk",           # For text processing
+    "anthropic",      # For Claude API
+    "click",          # For CLI interface
+    "sentence-transformers",  # For semantic operations
+    "numpy",          # Required by sentence-transformers
+    "dateparser",     # For parsing dates in context search
 ]
 
 [project.scripts]
-ramble = "scramble.cli.app:cli"
+ramble = "ramble.app:cli"  # Updated path for the new structure
+maxx = "ramblemaxx.app:RambleMaxx.run" 
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/scramble"]
+packages = ["scramble", "ramble", "ramblemaxx"]  # Updated to include both packages

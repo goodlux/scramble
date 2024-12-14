@@ -1,0 +1,104 @@
+Screen {
+    background: $surface;
+}
+
+#maxx-header {
+    dock: top;
+    padding: 1;
+    background: $boost;
+    color: $text;
+    text-align: center;
+    border-bottom: solid $primary;
+}
+
+#main-container {
+    width: 100%;
+    height: 100%;
+}
+
+#chat-pane {
+    width: 1fr;
+    height: 100%;
+    background: $surface;
+    border-right: solid $primary;
+}
+
+#code-pane {
+    width: 1fr;
+    height: 100%;
+    background: $surface;
+}
+
+#chat-input {
+    dock: bottom;
+    width: 100%;
+    padding: 1;
+}
+
+TextArea {
+    border: none;
+    padding: 0 1;
+}
+
+#code-editor {
+    height: 70%;
+}
+
+#code-output {
+    height: 30%;
+    border-top: solid $primary;
+}
+Screen {
+    background: #0a0a1f;
+    color: #00ff9f;
+}
+
+#os-header {
+    background: #1a1a2f;
+    text-align: center;
+    border-bottom: solid #ff003c;
+    padding: 1;
+}
+
+#sidebar {
+    width: 20%;
+    background: #0d0221;
+    border-right: solid #00ff9f;
+}
+
+#context-sidebar {
+    width: 20%;
+    background: #0d0221;
+    border-left: solid #ff003c;
+}
+
+#main-area {
+    background: #0d0221;
+    border: solid #00ff9f;
+    margin: 1;
+}
+
+Tab {
+    background: #1a1a2f;
+    color: #00ff9f;
+}
+
+Tab:hover {
+    background: #2a2a4f;
+}
+
+Input {
+    background: #1a1a2f;
+    color: #00ff9f;
+    border: solid #00ff9f;
+    margin: 1;
+}
+
+Tree {
+    background: #0d0221;
+    color: #00ff9f;
+}
+
+Tree:focus {
+    border: solid #ff003c;
+}
