@@ -9,14 +9,11 @@ Screen {
     height: 100%;
 }
 
-#chat-view {
+#chat-term {
     width: 100%;
     height: 100%;
-    padding: 1;
-    color: #cccccc;
     background: #111111;
-    border: solid #333333;
-    overflow-y: scroll;
+    color: #cccccc;
 }
 
 #side-pane {
@@ -24,18 +21,24 @@ Screen {
     height: 100%;
     background: #111111;
     border-left: solid #333333;
-    display: none;
 }
 
 #side-pane.hidden {
     display: none;
 }
 
-#doc-view, #code-view {
+#doc-view {
     width: 100%;
     height: 100%;
-    color: #cccccc;
     background: #111111;
+    color: #cccccc;
+}
+
+#code-term {
+    width: 100%;
+    height: 100%;
+    background: #111111;
+    color: #cccccc;
 }
 
 Header {

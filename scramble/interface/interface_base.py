@@ -12,7 +12,7 @@ from ..coordinator.model_coordinator import ModelCoordinator
 
 # Controllers
 from .message_controller import MessageController
-from .context_controller import ContextController
+#from ...ramble.context_controller import ContextController
 from .tool_controller import ToolController
 
 class InterfaceBase(ABC):
@@ -36,7 +36,7 @@ class InterfaceBase(ABC):
         
         # Controllers
         self.message_controller = MessageController(self)
-        self.context_controller = ContextController(self)
+        #self.context_controller = ContextController(self)
         self.tool_controller = ToolController(self)
         
         # Basic state

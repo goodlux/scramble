@@ -11,7 +11,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: MIT License"
 ]
 dependencies = [
     "rich",            # For CLI formatting
@@ -21,8 +21,9 @@ dependencies = [
     "sentence-transformers",  # For semantic operations
     "numpy",          # Required by sentence-transformers
     "dateparser",     # For parsing dates in context search
-    "textual",        # RambleMAXX interface
-    "litellm"         # LLM comms
+    "litellm",        # LLM comms
+    "textual",
+    "pyte"
 ]
 
 [project.scripts]

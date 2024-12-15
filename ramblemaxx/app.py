@@ -1,17 +1,10 @@
 """RambleMAXX - Terminal-based AI interaction interface."""
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import (
-    Header, 
-    Footer, 
-    Static, 
-    Log, 
-    TextArea, 
-    MarkdownViewer
-)
-import asyncio
+from textual.widgets import Header, Footer, MarkdownViewer
 
 from scramble.interface.maxx_interface import MAXXInterface
+from scramble.interface.widgets.chat_terminal_widget import ChatTerminalWidget
 
 class RambleMaxx(App):
     """Terminal-based interface for Scramble."""
@@ -27,25 +20,31 @@ class RambleMaxx(App):
     def __init__(self):
         super().__init__()
         self.interface = None
-        self._current_line = ""
-        self._input_ready = asyncio.Event()
     
     def on_mount(self) -> None:
         """Set up interface after app is mounted."""
+        # Create interface
         self.interface = MAXXInterface(self)
+        
+        # Get terminal widget and connect to interface
+        terminal = self.query_one("#chat-term", ChatTerminalWidget)
+        terminal.set_interface(self.interface)
+        
+        # Write welcome message using terminal tool
+        self.interface.tool_controller.invoke_tool(
+            "ChatTerminalWidget.write", 
+            "Welcome to RambleMAXX! Type :help for commands.\n"
+        )
     
     def compose(self) -> ComposeResult:
         """Create the interface layout."""
         yield Header(show_clock=True)
         yield Horizontal(
-            # Main chat view
-            Log(
-                id="chat-view"
-            ),
+            # Main chat terminal
+            ChatTerminalWidget(id="chat-term"),
             # Right side panel
             Vertical(
                 MarkdownViewer(id="doc-view", classes="hidden"),
-                TextArea(id="code-view", classes="hidden"),
                 id="side-pane",
                 classes="hidden"
             ),
@@ -53,26 +52,16 @@ class RambleMaxx(App):
         )
         yield Footer()
     
-    async def on_key(self, event) -> None:
-        """Handle terminal-style input."""
-        if event.key == "enter":
-            if self.interface and self._current_line:
-                # Process input
-                await self.interface.handle_input(self._current_line)
-                self._current_line = ""
-                # Show new prompt
-                chat_view = self.query_one("#chat-view", Log)
-                chat_view.write("")  # New line
+    async def on_chat_terminal_widget_input(self, message: ChatTerminalWidget.Input) -> None:
+        """Handle terminal input."""
+        if message.text.startswith(':'):
+            # Handle as Ramble command
+            if self.interface:
+                await self.interface.handle_command(message.text[1:])
         else:
-            # Handle input buffering
-            if event.key == "backspace":
-                self._current_line = self._current_line[:-1]
-            elif len(event.key) == 1:  # Regular character
-                self._current_line = self._current_line + event.key
-            
-            # Update display
-            chat_view = self.query_one("#chat-view", Log)
-            chat_view.write(f"> {self._current_line}", markup=False)
+            # Handle as chat message
+            if self.interface:
+                await self.interface.handle_message(message.text)
     
     def action_toggle_sidebar(self) -> None:
         """Toggle the side panel."""
@@ -82,19 +71,21 @@ class RambleMaxx(App):
         else:
             side_pane.add_class("hidden")
     
-    def action_show_help(self) -> None:
+    async def action_show_help(self) -> None:
         """Show help information."""
-        chat_view = self.query_one("#chat-view", Log)
-        chat_view.write("""
-[bold]Available Commands:[/bold]
+        if self.interface:
+            help_text = """
+Available Commands:
 F1          - Show this help
-Ctrl+B      - Toggle side panel
+Ctrl+B      - Toggle side panel 
 Ctrl+C      - Quit
+
+Chat Commands:
 :h, :help   - Show command help
 :c, :clear  - Clear screen
 :q, :quit   - Exit program
-        """)
-    
-    def action_quit(self) -> None:
-        """Exit the application."""
-        self.exit()
+"""
+            await self.interface.tool_controller.invoke_tool(
+                "ChatTerminalWidget.write",
+                help_text
+            )
