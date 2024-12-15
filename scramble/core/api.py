@@ -25,24 +25,21 @@ logger = logging.getLogger(__name__)
 
 
 class AnthropicClient:
-    """Handles interaction with Anthropic's API with semantic compression and conversation persistence."""
-
-    def __init__(self,
-                 api_key: Optional[str] = None,
-                 model: str = "claude-3-5-sonnet-latest", # claude-3-5-haiku-latest
-                 compressor: Optional[SemanticCompressor] = None,
-                 max_context_messages: int = 10,
-                context_manager: Optional[ContextManager] = None):
-
+    """Client for Anthropic's API with context management."""
+    
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "claude-3-opus-20240229",
+        compressor: Optional[SemanticCompressor] = None,
+        context_manager: Optional[ContextManager] = None
+    ):
         """Initialize the Anthropic client."""
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
         self.compressor = compressor or SemanticCompressor()
-        self.max_context_messages = max_context_messages
-        self.message_history: List[MessageParam] = []
-        self.current_context: Optional[Context] = None
         self.context_manager = context_manager
-
+        self.current_context: Optional[Context] = None
 
 
     def _build_messages_from_context(self, contexts: List[Context]) -> List[MessageParam]:

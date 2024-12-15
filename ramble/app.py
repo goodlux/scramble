@@ -97,65 +97,63 @@ class RambleCLI:
             self.command_handler = CommandHandler(self)
             self.message_handler = MessageHandler(self)
             
+            self._output_handler = None
+            self._display = None  # Add this for RambleDisplay
+            
             logger.debug("CLI initialization complete")
 
         except Exception as e:
             logger.error(f"Failed to initialize CLI: {e}")
             raise
 
+    def set_display(self, display: 'RambleDisplay'):
+        """Set the display component."""
+        self._display = display
+        # If using RambleDisplay, it handles its own output
+        if display:
+            self._output_handler = display.handle_output
+
+    def set_output_handler(self, handler):
+        """Set raw output handler (for RambleMAXX)."""
+        if not self._display:  # Only set if not using RambleDisplay
+            self._output_handler = handler
+
+    async def display(self, content):
+        """Display content through handler."""
+        if self._output_handler:
+            await self._output_handler(content)
+        else:
+            console.print(content)
+
     async def start_interactive(self):
         """Start interactive chat session."""
-        show_welcome(self.store)
+        await self.display("Welcome to Ramble!")
 
         while True:
             try:
+                # Display prompt
+                await self.display(f"[{datetime.now().strftime('%H:%M')}] > ")
+                
                 user_input = prompt_user(
                     prompt_style=self.config['ui']['prompt_style']
                 )
 
                 if user_input.lower() in ['exit', 'quit', ':q']:
-                    console.print("\n[dim]Goodbye! Contexts saved.[/dim]")
+                    await self.display("\n[dim]Goodbye! Contexts saved.[/dim]")
                     break
 
                 if user_input.startswith(':'):
                     self.command_handler.handle_command(user_input[1:])
                     continue
 
-                await self.message_handler.handle_message(user_input)  # Add await here
+                await self.message_handler.handle_message(user_input)
 
             except KeyboardInterrupt:
-                console.print("\n[dim]Goodbye! Contexts saved.[/dim]")
+                await self.display("\n[dim]Goodbye! Contexts saved.[/dim]")
                 break
             except Exception as e:
                 logger.exception("Error in interactive session")
-                console.print(f"[red]Error: {e}[/red]")
-
-    def _get_relevant_contexts(self):
-        """Get relevant contexts for current conversation."""
-        try:
-            contexts = []
-            max_contexts = self.config['context']['max_contexts']
-
-            if self.client.current_context:
-                chain = self.context_manager.get_conversation_chain(
-                    self.client.current_context.id
-                )
-                contexts.extend(chain)
-
-            remaining = max_contexts - len(contexts)
-            if remaining > 0:
-                recent = self.store.get_recent_contexts(
-                    hours=self.config['context']['time_window_hours'],
-                    limit=remaining
-                )
-                contexts.extend(recent)
-
-            seen = set()
-            return [ctx for ctx in contexts if not (ctx.id in seen or seen.add(ctx.id))]
-
-        except Exception as e:
-            logger.error(f"Error getting relevant contexts: {e}")
-            return []
+                await self.display(f"[red]Error: {e}[/red]")
         
 
 class RambleDisplay(Static):

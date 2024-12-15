@@ -3,15 +3,10 @@ RambleMaxx - Unleashed version of Ramble
 Now with 100% more MAXX and 100% less React
 """
 
-import os
-from typing import Dict, Any
+import os, sys
+import signal
+from typing import Optional, Dict, Any, TypedDict
 
-from scramble.core.compressor import SemanticCompressor
-from scramble.core.store import ContextManager
-from scramble.core.api import AnthropicClient
-#from scramble.core.mcp import MCPHandler
-#from scramble.core.tools import ToolInterface, ScrollTool
-from ramble.app import RambleCLI
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -19,161 +14,112 @@ from textual.widgets import (
     Header, 
     Footer, 
     Static, 
+    Log, 
+    TextArea, 
     MarkdownViewer,
-    TextArea,
     Input
 )
 from textual.binding import Binding
-from textual.reactive import reactive
-from textual.css.query import NoMatches
-from rich.markdown import Markdown
+from scramble.core.interface import ScrambleInterface
+import asyncio
 
-class MAXXViewer(MarkdownViewer):
-    """Custom markdown viewer that handles our content updates."""
-    
-    async def append_markdown(self, text: str) -> None:
-        """Add new markdown content."""
-        current = self.document.text if self.document else ""
-        if current:
-            current += "\n\n"
-        self.markdown = current + text 
 
-class RambleMaxx(App[None], ToolInterface):
-    """The MAXX version of Ramble"""
+class RambleMaxx(App[None], ScrambleInterface):
+    """The MAXX version of Scramble."""
     
     CSS_PATH = "styles/maxx.tcss"
     
     BINDINGS = [
         ("ctrl+t", "cycle_theme", "Theme"),
         ("ctrl+b", "toggle_sidebar", "Toggle Code"),
-        ("ctrl+k", "clear", "Clear"),
-        ("ctrl+m", "cycle_mode", "Mode"),
-        ("f1", "show_help", "Help"),
+        ("ctrl+c", "quit", "Quit"),
     ]
     
     def __init__(self):
-        super().__init__()
-        # Core components
-        self.compressor = SemanticCompressor()
-        self.context_manager = ContextManager()
-        self.client = AnthropicClient(
-            api_key=os.getenv('ANTHROPIC_API_KEY'),
-            compressor=self.compressor,
-            context_manager=self.context_manager
-        )
-        
-        # Ramble integration
-        self.ramble = RambleCLI()
-        
-        # UI state
-        self.current_view_mode = "split"
-        
-        # Tool system
-        self.mcp = MCPHandler(self)
-        self.tools = {}  # Registered tools
-
+        App.__init__(self)
+        ScrambleInterface.__init__(self)
+        self._input_ready = asyncio.Event()
+        self._current_input = None
+    
     def compose(self) -> ComposeResult:
         """Create our MAXX interface."""
         yield Header(show_clock=True)
         yield Static("🚀 RAMBLEMAXX [bold red]TURBO EDITION[/bold red] 🚀", id="maxx-header")
         yield Horizontal(
-            # Main Ramble pane
             Vertical(
-                MAXXViewer(id="chat-log"),
-                Input(
-                    placeholder="💭 Enter MAXX chat or :help for commands...",
-                    id="chat-input"
-                ),
+                Log(highlight=True, id="chat-view"),
+                Input(id="chat-input", placeholder="Enter message..."),
                 id="chat-pane"
             ),
-            # Side tools pane
             Vertical(
-                TextArea(
-                    language="python",
-                    id="code-editor",
-                ),
-                MAXXViewer(id="code-output"),
-                id="code-pane"
+                TextArea(language="python", id="code-editor"),
+                MarkdownViewer(id="code-output"),
+                id="side-pane",
+                classes="hidden"
             ),
             id="main-container"
         )
         yield Footer()
-
+    
     async def on_mount(self) -> None:
-        """Set up the app when it starts."""
-        try:
-            self.chat_log = self.query_one("#chat-log", MarkdownViewer)
-            self.code_editor = self.query_one("#code-editor", TextArea)
-            self.chat_input = self.query_one("#chat-input", Input)
-            
-            # Show welcome message using Textual's markdown
-            welcome_md = """
-# Welcome to RambleMaxx 🚀
-
-[bold red]TURBO EDITION[/bold red]
-
-- Split pane layout for maximum power
-- Full markdown and code support
-- Theme switching with Ctrl+T
-- View modes with Ctrl+M
-- Help available with F1
-
-Let's get MAXX! 
-            """
-            await self.chat_log.update(welcome_md)
-        except NoMatches as e:
-            self.notify("Error setting up interface", severity="error")
-
-    async def handle_maxx_chat(self, text: str) -> None:
-        """Process chat messages through Ramble."""
-        # Pass to Ramble for processing
-        await self.ramble.handle_message(text)
-        
-        # Update display with Textual's markdown
-        current = self.chat_log.document.text if self.chat_log.document else ""
-        new_content = f"{current}\n\n**You**: {text}\n\n"
-        await self.chat_log.update(new_content)
-
-    async def handle_maxx_command(self, command: str) -> None:
-        """Handle MAXX commands."""
-        if command == "help":
-            help_text = """
-# RambleMaxx Commands
-
-- `:help` - Show this help
-- `:clear` - Clear chat
-- `:theme` - Cycle themes
-- `:mode` - Change view mode
-            """
-            await self.chat_log.load(help_text)
+        """Start the interface."""
+        # Start the main loop
+        asyncio.create_task(self.run())
+    
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle input submission."""
+        self._current_input = event.input.value
+        event.input.value = ""  # Clear input
+        self._input_ready.set()  # Signal input is ready
+    
+    async def display_output(self, content: str) -> None:
+        """Display output in the chat view."""
+        chat_view = self.query_one("#chat-view", Log)
+        chat_view.write(content)
+    
+    async def get_input(self) -> str:
+        """Get input through Textual."""
+        self._input_ready.clear()  # Reset event
+        await self._input_ready.wait()  # Wait for input
+        return self._current_input
+    
+    async def handle_command(self, command: str) -> None:
+        """Handle commands."""
+        if command == "theme":
+            self.action_cycle_theme()
         elif command == "clear":
-            await self.action_clear()
-        else:
-            self.notify(f"Unknown command: {command}", severity="error")
+            chat_view = self.query_one("#chat-view", Log)
+            chat_view.clear()
+        elif command == "help":
+            await self.display_output("""
+Available commands:
+:theme - Cycle theme
+:clear - Clear chat
+:help  - Show this help
+""")
 
-    async def register_tool(self, tool: ScrollTool) -> None:
-        """Register a tool with the interface."""
-        self.tools[tool.name] = tool
-        
-    async def handle_tool_call(self, tool_name: str, **kwargs) -> Dict[str, Any]:
-        """Handle a tool being called."""
-        if tool_name not in self.tools:
-            raise ValueError(f"Unknown tool: {tool_name}")
-        return await self.tools[tool_name].run(**kwargs)
 
-    # Actions
-    async def action_clear(self) -> None:
-        """Clear the chat."""
-        await self.chat_log.load("")
+
 
     def action_toggle_sidebar(self) -> None:
-        """Toggle code pane visibility."""
+        """Toggle sidebar visibility."""
         try:
-            code_pane = self.query_one("#code-pane")
-            code_pane.visible = not code_pane.visible
+            side_pane = self.query_one("#side-pane")
+            if "hidden" in side_pane.classes:
+                side_pane.remove_class("hidden")
+            else:
+                side_pane.add_class("hidden")
         except NoMatches:
-            self.notify("Code pane not found", severity="error")
+            self.notify("Side pane not found", severity="error")
 
-    def action_show_help(self) -> None:
-        """Show help overlay."""
-        self.notify("Help system coming soon!", severity="information")
+    def _emergency_shutdown(self, *args: Any) -> None:
+        """EMERGENCY SHUTDOWN PROTOCOL"""
+        print("\n🚨 EMERGENCY SHUTDOWN INITIATED 🚨")
+        self.exit()
+        sys.exit(0)
+
+    async def action_quit(self) -> None:
+        """Quit with extreme prejudice."""
+        print("\n👋 Goodbye! (Containment Successful)")
+        self.exit()
+        sys.exit(0)
