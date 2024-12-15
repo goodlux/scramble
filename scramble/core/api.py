@@ -35,12 +35,118 @@ class AnthropicClient:
         context_manager: Optional[ContextManager] = None
     ):
         """Initialize the Anthropic client."""
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = Anthropic(api_key=api_key)
         self.model = model
         self.compressor = compressor or SemanticCompressor()
         self.context_manager = context_manager
         self.current_context: Optional[Context] = None
 
+    def send_message(
+        self, 
+        message: str,
+        contexts: Optional[List[Context]] = None
+    ) -> Awaitable[Dict[str, Any]]:
+        """
+        Send a message to Claude with context management.
+        Returns an awaitable that resolves to the response dict.
+        """
+        async def _send() -> Dict[str, Any]:
+            try:
+                # Prepare system message with contexts if any
+                system_message = self._prepare_system_message(contexts) if contexts else None
+                
+                # Make async call to Anthropic
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    system=system_message,
+                    messages=[
+                        {"role": "user", "content": message}
+                    ]
+                )
+                
+                # Create new context
+                new_context = self.compressor.compress(
+                    text_content=f"{message}\n\n{response.content[0].text}",
+                    metadata={
+                        'model': self.model,
+                        'timestamp': response.created_at,
+                    }
+                )
+                
+                # Update current context
+                self.current_context = new_context
+                
+                return {
+                    'response': response.content[0].text,
+                    'context': new_context
+                }
+                
+            except Exception as e:
+                raise RuntimeError(f"Error sending message to Claude: {e}")
+
+        return asyncio.create_task(_send())class AnthropicClient:
+    """Client for Anthropic's API with context management."""
+    
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "claude-3-opus-20240229",
+        compressor: Optional[SemanticCompressor] = None,
+        context_manager: Optional[ContextManager] = None
+    ):
+        """Initialize the Anthropic client."""
+        self.client = Anthropic(api_key=api_key)
+        self.model = model
+        self.compressor = compressor or SemanticCompressor()
+        self.context_manager = context_manager
+        self.current_context: Optional[Context] = None
+
+    def send_message(
+        self, 
+        message: str,
+        contexts: Optional[List[Context]] = None
+    ) -> Awaitable[Dict[str, Any]]:
+        """
+        Send a message to Claude with context management.
+        Returns an awaitable that resolves to the response dict.
+        """
+        async def _send() -> Dict[str, Any]:
+            try:
+                # Prepare system message with contexts if any
+                system_message = self._prepare_system_message(contexts) if contexts else None
+                
+                # Make async call to Anthropic
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    system=system_message,
+                    messages=[
+                        {"role": "user", "content": message}
+                    ]
+                )
+                
+                # Create new context
+                new_context = self.compressor.compress(
+                    text_content=f"{message}\n\n{response.content[0].text}",
+                    metadata={
+                        'model': self.model,
+                        'timestamp': response.created_at,
+                    }
+                )
+                
+                # Update current context
+                self.current_context = new_context
+                
+                return {
+                    'response': response.content[0].text,
+                    'context': new_context
+                }
+                
+            except Exception as e:
+                raise RuntimeError(f"Error sending message to Claude: {e}")
+
+        return asyncio.create_task(_send())
 
     def _build_messages_from_context(self, contexts: List[Context]) -> List[MessageParam]:
         """Convert contexts into a list of messages for the API."""

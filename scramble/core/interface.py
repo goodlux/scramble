@@ -50,7 +50,7 @@ class ScrambleMixin:
                 contexts=contexts
             )
             
-            # Store new context with chain linking
+            # Store new context with chains linking
             if self.client.current_context:
                 response['context'].metadata['parent_context'] = \
                     self.client.current_context.id
