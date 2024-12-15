@@ -21,6 +21,8 @@ dependencies = [
     "sentence-transformers",  # For semantic operations
     "numpy",          # Required by sentence-transformers
     "dateparser",     # For parsing dates in context search
+    "textual",        # RambleMAXX interface
+    "litellm"         # LLM comms
 ]
 
 [project.scripts]

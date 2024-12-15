@@ -1,61 +1,51 @@
 Screen {
-    background: #1a1b26;
+    layout: grid;
+    grid-size: 2;
+    background: #111111;
 }
 
 #main-container {
     width: 100%;
     height: 100%;
-    background: #1a1b26;
 }
 
-#ramble-view {
+#chat-view {
+    width: 100%;
     height: 100%;
-    dock: top;  # Add this
-    background: red;  # Temporary bright color
-    color: white;
-    border: solid yellow;  # Very visible border
     padding: 1;
+    color: #cccccc;
+    background: #111111;
+    border: solid #333333;
     overflow-y: scroll;
-    min-height: 100%;
-}
-
-#ramble-pane {
-    width: 70%;
-    height: 100%;
-    background: blue;  # Temporary bright color
-    padding: 1;
-    border: solid green;  # Very visible border
-}
-
-#maxx-header {
-    height: 1;
-    padding: 0 1;
-    background: #24283b;
-    color: #7aa2f7;
-    text-align: center;
-    text-style: bold;
 }
 
 #side-pane {
     width: 30%;
     height: 100%;
-    background: #24283b;
-    border: solid #414868;
-    padding: 1;
-}
-
-.hidden {
+    background: #111111;
+    border-left: solid #333333;
     display: none;
 }
 
-#code-editor {
-    height: 60%;
-    border: solid #414868;
-    margin-bottom: 1;
+#side-pane.hidden {
+    display: none;
 }
 
-#code-output {
-    height: 40%;
-    border: solid #414868;
+#doc-view, #code-view {
+    width: 100%;
+    height: 100%;
+    color: #cccccc;
+    background: #111111;
 }
 
+Header {
+    height: 1;
+    background: #222222;
+    color: #666666;
+}
+
+Footer {
+    height: 1;
+    background: #222222;
+    color: #666666;
+}

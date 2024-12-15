@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from .base import ScrollTool
+from .tool_base import ScrollTool
 
 class ToolInterface:
     """Interface that UIs must implement for tool support."""

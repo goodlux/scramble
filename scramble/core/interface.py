@@ -1,4 +1,8 @@
 """Core interface for Scramble clients."""
+"""
+DEPRECATED: This interface is being replaced by scramble/interface/interface_base.py
+Keeping for reference until new interface is fully implemented.
+"""
 from typing import Protocol, runtime_checkable
 import os
 from datetime import datetime

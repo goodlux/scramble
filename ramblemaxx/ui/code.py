@@ -1,4 +1,4 @@
-from scramble.tools.base import LocalTool
+from scramble.tools.tool_base import LocalTool
 from typing import Dict, Any, Literal, Optional
 
 class CodePanelTool(LocalTool):

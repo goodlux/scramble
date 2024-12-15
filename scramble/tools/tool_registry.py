@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, Literal, Optional
-from .base import LocalTool, MCPTool, DynamicTool
+from .tool_base import LocalTool, MCPTool, DynamicTool
 
 logger = logging.getLogger(__name__)
 

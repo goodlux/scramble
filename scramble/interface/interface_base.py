@@ -1,41 +1,57 @@
-"""Base interface class for Scramble applications."""
+"""Base interface class for all Scramble applications."""
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from datetime import datetime
-import asyncio
 import os
+import asyncio
 
+
+# Core components
 from ..core.store import ContextManager
-from ..core.api import AnthropicClient
+from ..coordinator.model_coordinator import ModelCoordinator
+
+# Controllers
+from .message_controller import MessageController
+from .context_controller import ContextController
+from .tool_controller import ToolController
 
 class InterfaceBase(ABC):
     """Base interface that supports core Scramble functionality."""
     
     def __init__(self):
         """Initialize interface."""
-        # Core components (matching ramble's current working setup)
+
+        # Initialize capabilities first
+        self.capabilities: Dict[str, bool] = {
+            'has_sidebar': False,
+            'has_code_view': False,
+            'has_debug': True,
+            'has_themes': False,
+        }
+
+        # Core components and controllers stay here
         self.context_manager = ContextManager()
         self.store = self.context_manager.store
-        self.client = None  # Set up in setup()
+        self.model_coordinator = ModelCoordinator()
+        
+        # Controllers
+        self.message_controller = MessageController(self)
+        self.context_controller = ContextController(self)
+        self.tool_controller = ToolController(self)
         
         # Basic state
         self._setup_complete = False
         self._shutdown_requested = False
     
+    @abstractmethod
+    def format_prompt(self) -> str:
+        """Format prompt for display."""
+        raise NotImplementedError
+    
     async def setup(self) -> None:
-        """Setup interface and core components."""
+        """Setup the interface."""
         if self._setup_complete:
             return
-            
-        # Set up client (using existing working code)
-        api_key = os.getenv('ANTHROPIC_API_KEY')
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
-            
-        self.client = AnthropicClient(
-            api_key=api_key,
-            context_manager=self.context_manager
-        )
         
         self._setup_complete = True
     
@@ -65,66 +81,13 @@ class InterfaceBase(ABC):
         """Clear the display."""
         raise NotImplementedError
     
-    # Message handling
-    async def process_message(self, message: str) -> None:
-        """Process a chat message using existing working code."""
-        try:
-            contexts = self.context_manager.process_message(message)
-            response = await self.client.send_message(
-                message=message,
-                contexts=contexts
-            )
-            
-            if self.client.current_context:
-                response['context'].metadata['parent_context'] = \
-                    self.client.current_context.id
-                self.store.add(response['context'])
-            
-            await self.display_output(response['response'])
-            
-        except Exception as e:
-            await self.display_error(f"Error processing message: {e}")
-    
-    # Command handling
+    # Input handling
     async def handle_input(self, user_input: str) -> None:
         """Process user input."""
         if user_input.startswith(':'):
-            await self.handle_command(user_input[1:])
+            await self.context_controller.handle_command(user_input[1:])
         else:
-            await self.process_message(user_input)
-    
-    async def handle_command(self, command: str) -> None:
-        """Handle basic commands."""
-        commands = {
-            'h': self.show_help,
-            'help': self.show_help,
-            'q': self.quit,
-            'quit': self.quit,
-            'c': self.clear,
-            'clear': self.clear,
-        }
-        
-        cmd_func = commands.get(command.lower())
-        if cmd_func:
-            await cmd_func()
-        else:
-            await self.display_error(f"Unknown command: {command}")
-    
-    # Standard commands
-    async def show_help(self) -> None:
-        """Show help message."""
-        help_text = """
-Available commands:
-:h, :help  - Show this help message
-:q, :quit  - Exit the program
-:c, :clear - Clear the screen
-"""
-        await self.display_output(help_text)
-    
-    async def quit(self) -> None:
-        """Exit the program."""
-        await self.display_status("Goodbye! Contexts saved.")
-        self._shutdown_requested = True
+            await self.message_controller.handle_message(user_input)
     
     # Main run loop
     async def run(self) -> None:
