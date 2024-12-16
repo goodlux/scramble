@@ -8,6 +8,14 @@ from .base_textual_widget import BaseTextualWidget
 class ChatTerminalWidget(BaseTextualWidget):
     """A terminal-like widget optimized for chat interactions."""
     
+    # Add the Input class back as an inner class
+    class Input(Message):
+        """Message sent when user submits input."""
+        def __init__(self, sender: "ChatTerminalWidget", text: str) -> None:
+            self.sender = sender
+            self.text = text
+            super().__init__()
+
     DEFAULT_CSS = """
     ChatTerminalWidget {
         background: #111111;
@@ -18,14 +26,8 @@ class ChatTerminalWidget(BaseTextualWidget):
     }
     """
 
-    def __init__(
-        self,
-        *,
-        name: str | None = None,
-        id: str | None = None,
-        classes: str | None = None,
-    ):
-        super().__init__(name=name, id=id, classes=classes)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         
         # Use private attributes for pyte screen and stream
         self._screen = pyte.Screen(80, 24)

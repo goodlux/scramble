@@ -1,0 +1,23 @@
+classDiagram
+    class ScrollManager {
+        +manage_scroll()
+        +coordinate_models()
+        +access_tools()
+    }
+    
+    class UserScroll {
+        +index_content()
+    }
+    
+    class SemanticIndex {
+        +reference_sources()
+    }
+    
+    class ToolRegistry {
+        +register_tool()
+        +get_tool()
+    }
+    
+    ScrollManager --> UserScroll : manages
+    ScrollManager --> ToolRegistry : accesses
+    UserScroll --> SemanticIndex : indexes

@@ -1,7 +1,8 @@
 # scramble/interface/widgets/base.py
 from textual.widget import Widget
-from textual.message import Message
 from typing import Dict, Any, Optional
+from ...tools.tool_base import LocalTool
+import asyncio
 
 class BaseTextualWidget(Widget):
     """Base class for Scramble widgets."""
@@ -27,10 +28,12 @@ class BaseTextualWidget(Widget):
         self.interface = interface
         # Register tools with interface
         for name, method in self.tool_methods.items():
-            self.interface.tool_controller.register_tool(
-                f"{self.__class__.__name__}.{name}",
-                method
+            tool = LocalTool(
+                name=f"{self.__class__.__name__}.{name}",
+                description=method.__doc__ or f"{name} method for {self.__class__.__name__}",
+                method=method
             )
+            await self.interface.tool_controller.register_tool(tool)
             
     async def handle_command(self, command: str) -> None:
         """Handle widget-specific commands."""
