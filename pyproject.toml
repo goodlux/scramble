@@ -13,18 +13,8 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License"
 ]
-dependencies = [
-    "rich",            # For CLI formatting
-    "nltk",           # For text processing
-    "anthropic",      # For Claude API
-    "click",          # For CLI interface
-    "sentence-transformers",  # For semantic operations
-    "numpy",          # Required by sentence-transformers
-    "dateparser",     # For parsing dates in context search
-    "litellm",        # LLM comms
-    "textual",
-    "pyte"
-]
+
+
 
 [project.scripts]
 ramble = "ramble.app:cli"  # Updated path for the new structure

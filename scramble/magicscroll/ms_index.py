@@ -12,8 +12,9 @@ from llama_index import (
     load_index_from_storage
 )
 from llama_index.embeddings import HuggingFaceEmbedding
-from llama_index.vector_stores import VectorStoreQuery
-from .ms_entry import MSEntry, EntryType
+from llama_index.vector_stores import ChromaVectorStore, VectorStoreQuery
+import chromadb
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,13 @@ class LlamaIndexImpl(MSIndexBase):
         self.storage_path = storage_path
         self.storage_path.mkdir(parents=True, exist_ok=True)
         
+        # Initialize Chroma
+        self.chroma_client = chromadb.PersistentClient(path=str(storage_path))
+        self.collection = self.chroma_client.get_or_create_collection("magicscroll")
+        
+        # Create vector store
+        vector_store = ChromaVectorStore(chroma_collection=self.collection)
+        
         # Initialize embedding model
         self.embed_model = HuggingFaceEmbedding(
             model_name="BAAI/bge-large-en-v1.5",
@@ -85,23 +93,18 @@ class LlamaIndexImpl(MSIndexBase):
             chunk_overlap=50
         )
         
-        # Load or create index
-        try:
-            logger.info(f"Loading index from {storage_path}")
-            self.storage_context = StorageContext.from_defaults(
-                persist_dir=str(storage_path)
-            )
-            self.index = load_index_from_storage(
-                storage_context=self.storage_context,
-                service_context=self.service_context
-            )
-            logger.info("Successfully loaded existing index")
-        except Exception as e:
-            logger.info(f"Creating new index: {e}")
-            self.index = VectorStoreIndex(
-                [],
-                service_context=self.service_context
-            )
+        # Create storage context
+        self.storage_context = StorageContext.from_defaults(
+            vector_store=vector_store,
+            persist_dir=str(storage_path)
+        )
+        
+        # Create index
+        self.index = VectorStoreIndex(
+            [],
+            storage_context=self.storage_context,
+            service_context=self.service_context
+        )
     
     async def add_entry(self, entry: MSEntry) -> bool:
         """Add an entry to the index."""

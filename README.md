@@ -1,6 +1,8 @@
-# scRAMble
+# scRAMble MAXX
+ 
+semantically compressed RAM-based language exchange
 
-semantic compression RAM-based language exchange
+featuring rambleMAXX the AI enhanced terminal chat interface from the 1980's, now with Magic Scroll technology 
 
 ## Installation
 
@@ -21,9 +23,9 @@ Start the interactive CLI:
 ramble
 ```
 
-Or run as a module:
+Or take it to the MAXX with rambleMAXX:
 ```bash
-python -m scramble
+maxx
 ```
 
 ## Development

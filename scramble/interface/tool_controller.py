@@ -1,8 +1,8 @@
 # interface/tool_controller.py
 """Controller for tool registration and execution."""
 from typing import Dict, Any, Optional, List
-from ..tools.tool_base import ScrollTool, LocalTool
-from ..tools.tool_registry import ToolRegistry
+from ..tool.tool_base import ScrollTool, LocalTool
+from ..tool.tool_registry import ToolRegistry
 
 class ToolController:
     """Handles tool registration and execution."""

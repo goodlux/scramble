@@ -1,0 +1,13 @@
+rich
+nltk
+anthropic
+click
+sentence-transformers
+numpy
+dateparser
+litellm==1.12.1
+textual
+pyte
+redis>=5.0.1
+chromadb>=0.4.22
+llama-index>=0.9.10

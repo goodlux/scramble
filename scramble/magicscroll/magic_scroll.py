@@ -12,6 +12,9 @@ from .ms_entry import (
     EntryType
 )
 from .ms_index import MSIndexBase, LlamaIndexImpl
+from .ms_store import RedisStore
+import redis
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ class MagicScroll:
         logger.info(f"Initializing MagicScroll at {self.storage_path}")
         
         # Initialize the index
+        self.doc_store = RedisStore()
         self.index = LlamaIndexImpl(self.storage_path)
     
     async def write_conversation(self,
@@ -59,11 +63,22 @@ class MagicScroll:
             parent_id=parent_id
         )
         
-        if await self.index.add_entry(entry):
+        # Store in both Redis and vector index
+        if await self.doc_store.store_entry(entry):
+            # Create LlamaIndex document
+            doc = Document(
+                text=entry.content,
+                doc_id=entry.id,
+                metadata=entry.to_dict()
+            )
+            
+            # Add to vector index
+            await self.index.add_entry(doc)
             logger.info(f"Added conversation entry {entry.id}")
             return entry.id
         else:
             raise RuntimeError("Failed to write conversation to scroll")
+        
     
     async def write_document(self,
         title: str,
@@ -152,33 +167,22 @@ class MagicScroll:
         else:
             raise RuntimeError("Failed to write code to scroll")
     
-    async def remember(self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5,
-        min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """
-        Search the scroll's memory.
+    async def remember(self, query: str, entry_types: Optional[List[EntryType]] = None,
+                      limit: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
+        """Search the scroll's memory."""
+        # Search vector index
+        results = await self.index.search(query, entry_types, limit, min_score)
         
-        Args:
-            query: What to search for
-            entry_types: Optional list of entry types to search
-            limit: Maximum number of results
-            min_score: Minimum similarity score
-            
-        Returns:
-            List of matching entries with their scores
-        """
-        results = await self.index.search(
-            query=query,
-            entry_types=entry_types,
-            limit=limit,
-            min_score=min_score
-        )
+        # Fetch full entries from Redis
+        enhanced_results = []
+        for result in results:
+            entry_id = result["entry"].id
+            full_entry = await self.doc_store.get_entry(entry_id)
+            if full_entry:
+                result["entry"] = full_entry
+                enhanced_results.append(result)
         
-        logger.debug(f"Found {len(results)} matches for query: {query}")
-        return results
+        return enhanced_results
     
     async def recall(self, entry_id: str) -> Optional[MSEntry]:
         """

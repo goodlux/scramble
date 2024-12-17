@@ -1,7 +1,7 @@
 # scramble/interface/widgets/base.py
 from textual.widget import Widget
 from typing import Dict, Any, Optional
-from ...tools.tool_base import LocalTool
+from ...tool.tool_base import LocalTool
 import asyncio
 
 class BaseTextualWidget(Widget):
