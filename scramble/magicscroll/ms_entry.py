@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 import uuid
 
 class EntryType(Enum):
@@ -16,14 +16,15 @@ class EntryType(Enum):
 @dataclass
 class MSEntry:
     """Base class for all MagicScroll entries."""
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     content: str
     entry_type: EntryType
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     parent_id: Optional[str] = None
 
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert entry to dictionary format."""
         return {
@@ -35,6 +36,21 @@ class MSEntry:
             "updated_at": self.updated_at.isoformat(),
             "parent_id": self.parent_id
         }
+    
+    @staticmethod
+    def sanitize_metadata_for_chroma(metadata: Dict[str, Any]) -> Dict[str, Union[str, int, float, None]]:
+        """Convert metadata values to ChromaDB compatible types."""
+        if metadata is None:
+            return {}
+            
+        sanitized = {}
+        for key, value in metadata.items():
+            if isinstance(value, (str, int, float)) or value is None:
+                sanitized[key] = value
+            else:
+                # Convert other types to string representation
+                sanitized[key] = str(value)
+        return sanitized
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MSEntry':

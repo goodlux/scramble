@@ -1,4 +1,5 @@
 # magic_scroll.py
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
@@ -14,7 +15,9 @@ from .ms_entry import (
 from .ms_index import MSIndexBase, LlamaIndexImpl
 from .ms_store import RedisStore
 import redis
-
+from llama_index.core import Document
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 logger = logging.getLogger(__name__)
 
@@ -43,41 +46,33 @@ class MagicScroll:
     
     async def write_conversation(self,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[List[str]] = None,
         parent_id: Optional[str] = None
     ) -> str:
-        """
-        Write a conversation to the scroll.
-        
-        Args:
-            content: The conversation text
-            metadata: Additional metadata about the conversation
-            parent_id: ID of the parent entry if this is part of a thread
-            
-        Returns:
-            The ID of the new entry
-        """
+        """Write a conversation to the scroll."""
         entry = MSConversation(
             content=content,
-            metadata=metadata,
+            metadata={"tags": metadata} if metadata else None,
             parent_id=parent_id
         )
         
-        # Store in both Redis and vector index
-        if await self.doc_store.store_entry(entry):
-            # Create LlamaIndex document
+        try:
+            # Store in both Redis and vector index
             doc = Document(
                 text=entry.content,
                 doc_id=entry.id,
-                metadata=entry.to_dict()
             )
             
-            # Add to vector index
-            await self.index.add_entry(doc)
-            logger.info(f"Added conversation entry {entry.id}")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write conversation to scroll")
+            # Store in both stores via storage context
+            if await self.index.add_entry(entry):
+                logger.info(f"Added conversation entry {entry.id}")
+                return entry.id
+            else:
+                raise RuntimeError("Failed to write conversation to scroll")
+                
+        except Exception as e:
+            logger.error(f"Error writing conversation: {str(e)}")
+            raise RuntimeError(f"Failed to write conversation to scroll: {str(e)}")
         
     
     async def write_document(self,

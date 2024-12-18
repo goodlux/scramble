@@ -1,20 +1,34 @@
 # ms_index.py
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 import logging
-from llama_index import (
+
+# LlamaIndex core imports
+from llama_index.core import (
     VectorStoreIndex,
-    ServiceContext,
     Document,
     StorageContext,
-    load_index_from_storage
+    Settings,
+    load_index_from_storage,
 )
-from llama_index.embeddings import HuggingFaceEmbedding
-from llama_index.vector_stores import ChromaVectorStore, VectorStoreQuery
-import chromadb
+# Redis imports
 
+from llama_index.storage.docstore.redis import RedisDocumentStore
+from llama_index.storage.index_store.redis import RedisIndexStore
+# Vector store and embeddings
+from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.core.vector_stores import VectorStoreQuery
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
+# ChromaDB
+import chromadb
+import redis
+
+# Local imports
+from .ms_entry import MSEntry, EntryType
 
 logger = logging.getLogger(__name__)
 
@@ -65,62 +79,90 @@ class MSIndexBase(ABC):
     async def get_chain(self, entry_id: str) -> List[MSEntry]:
         """Get chain of entries connected by parent_id."""
         pass
-
+    
 class LlamaIndexImpl(MSIndexBase):
     """LlamaIndex implementation of MagicScroll index."""
-    
-    def __init__(self, storage_path: Path):
-        self.storage_path = storage_path
+
+    def __init__(self, storage_path: Optional[Path] = None):
+        """Initialize LlamaIndex implementation."""
+        self.storage_path = storage_path or Path.home() / '.scramble' / 'scroll'
         self.storage_path.mkdir(parents=True, exist_ok=True)
         
-        # Initialize Chroma
-        self.chroma_client = chromadb.PersistentClient(path=str(storage_path))
-        self.collection = self.chroma_client.get_or_create_collection("magicscroll")
+        # Initialize ChromaDB for vector store
+        chroma_path = self.storage_path / 'chroma'
+        chroma_path.mkdir(exist_ok=True)
+        self.chroma_client = chromadb.PersistentClient(path=str(chroma_path))
+        self.collection = self.chroma_client.get_or_create_collection("scroll-store")
+        self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
         
-        # Create vector store
-        vector_store = ChromaVectorStore(chroma_collection=self.collection)
-        
-        # Initialize embedding model
-        self.embed_model = HuggingFaceEmbedding(
+        # Initialize Redis document store
+        self.doc_store = RedisDocumentStore.from_host_and_port(host='localhost', port=6379, namespace='scramble')
+
+        # Initialize embedding model and settings
+        Settings.embed_model = HuggingFaceEmbedding(
             model_name="BAAI/bge-large-en-v1.5",
             embed_batch_size=32
         )
-        
-        # Create service context
-        self.service_context = ServiceContext.from_defaults(
-            embed_model=self.embed_model,
+        Settings.node_parser = SentenceSplitter(
             chunk_size=512,
             chunk_overlap=50
         )
-        
-        # Create storage context
-        self.storage_context = StorageContext.from_defaults(
-            vector_store=vector_store,
-            persist_dir=str(storage_path)
-        )
-        
-        # Create index
-        self.index = VectorStoreIndex(
-            [],
-            storage_context=self.storage_context,
-            service_context=self.service_context
-        )
-    
+        Settings.llm = None  # Explicitly disable LLM usage
+                
+        # Create storage context with both stores
+        try:
+            logger.info("Initializing storage context with Redis and ChromaDB")
+            self.storage_context = StorageContext.from_defaults(
+                vector_store=self.vector_store,
+                docstore=self.doc_store,
+                persist_dir=str(self.storage_path)  # Add persist_dir here
+            )
+            
+            # Try to load existing index
+            try:
+                self.index = load_index_from_storage(
+                    storage_context=self.storage_context,
+                    persist_dir=str(self.storage_path)  # Add persist_dir here
+                )
+                logger.info("Successfully loaded existing index")
+            except Exception as load_err:
+                logger.info(f"No existing index found, creating new one: {load_err}")
+                self.index = VectorStoreIndex.from_documents(
+                    [],
+                    storage_context=self.storage_context,
+                    show_progress=True
+                )
+                # Persist the new index
+                self.index.storage_context.persist(persist_dir=str(self.storage_path))
+                logger.info("Created and persisted new index")
+            
+        except Exception as e:
+            logger.error(f"Error initializing storage: {e}")
+            raise
+
+
     async def add_entry(self, entry: MSEntry) -> bool:
         """Add an entry to the index."""
         try:
+            # Check if we already have a version of this content
+            existing_docs = self.index.storage_context.docstore.docs
+            for doc_id, doc in existing_docs.items():
+                if doc.get_content() == entry.content:
+                    logger.debug(f"Content already exists in doc {doc_id}, skipping")
+                    return True
+                    
             # Create LlamaIndex document
             doc = Document(
                 text=entry.content,
                 doc_id=entry.id,
-                metadata=entry.to_dict()
+                extra_info=MSEntry.sanitize_metadata_for_chroma(entry.to_dict())
             )
             
             # Add to index
             self.index.insert(doc)
             
             # Persist changes
-            self.index.storage_context.persist(str(self.storage_path))
+            self.index.storage_context.persist(persist_dir=str(self.storage_path))
             
             logger.debug(f"Successfully added entry {entry.id} to index")
             return True
@@ -128,7 +170,8 @@ class LlamaIndexImpl(MSIndexBase):
         except Exception as e:
             logger.error(f"Error adding entry to index: {e}")
             return False
-    
+            
+
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
         """Get a specific entry."""
         try:
@@ -150,6 +193,7 @@ class LlamaIndexImpl(MSIndexBase):
             logger.error(f"Error deleting entry {entry_id}: {e}")
             return False
     
+
     async def search(self,
         query: str,
         entry_types: Optional[List[EntryType]] = None,
@@ -158,45 +202,92 @@ class LlamaIndexImpl(MSIndexBase):
     ) -> List[Dict[str, Any]]:
         """Search for entries."""
         try:
+            logger.info(f"Beginning search for query: {query}")
+            
             # Build metadata filter if entry types specified
             metadata_filter = None
             if entry_types:
                 metadata_filter = {
                     "type": {"$in": [t.value for t in entry_types]}
                 }
+                logger.debug(f"Using metadata filter: {metadata_filter}")
             
             # Create query
             vector_store_query = VectorStoreQuery(
                 query_str=query,
-                metadata_filter=metadata_filter,
                 similarity_top_k=limit * 2  # Get extra results for score filtering
             )
+            logger.debug(f"Created vector store query: {vector_store_query}")
             
-            # Execute query
-            query_result = self.index.as_query_engine(
-                vector_store_query=vector_store_query
-            ).query(query)
+            # Debug: Let's check what's in our index
+            logger.info("Checking index contents:")
+            try:
+                all_docs = self.index.storage_context.docstore.docs
+                logger.info(f"Documents in store: {len(all_docs)}")
+                for doc_id, doc in all_docs.items():
+                    logger.info(f"Doc ID: {doc_id}")
+                   
+            except Exception as e:
+                logger.error(f"Error checking docs: {e}")
+            
+            # Execute query without OpenAI dependency
+            query_engine = self.index.as_query_engine(
+                vector_store_query=vector_store_query,
+                similarity_top_k=limit * 2,
+                response_synthesizer=None  # This prevents OpenAI usage
+            )
+            logger.info("Executing query...")
+            query_result = query_engine.query(query)
+            logger.info(f"Query completed. Source nodes: {len(query_result.source_nodes)}")
             
             # Process results
             results = []
             for node in query_result.source_nodes:
+                logger.info(f"Processing node with ID: {node.node_id}")
+                logger.info(f"Node score: {getattr(node, 'score', 'No score')}")
+                logger.info(f"Node metadata: {getattr(node, 'metadata', 'No metadata')}")
+                
                 if hasattr(node, 'score') and node.score < min_score:
+                    logger.debug(f"Skipping node due to low score: {node.score}")
                     continue
                     
-                results.append({
-                    "entry": MSEntry.from_dict(node.metadata),
-                    "score": getattr(node, 'score', 1.0),
-                    "relevance_score": getattr(node, 'relevance_score', 1.0)
-                })
+                try:
+                    # Get the metadata and verify it
+                    metadata = getattr(node, 'metadata', {})
+                    logger.info(f"Raw metadata: {metadata}")
+
+                    if not metadata:
+                        logger.warning(f"No metadata for node {node.node_id}")
+                        continue
+
+                    entry = MSEntry.from_dict(metadata)
+                    result = {
+                        "entry": entry,
+                        "score": getattr(node, 'score', 1.0),
+                        "relevance_score": getattr(node, 'relevance_score', 1.0)
+                    }
+
+                    results.append(result)
+                    logger.info(f"Added result: {result}")
+                 
+                except Exception as e:
+                    logger.error(f"Error processing node {node.node_id}: {e}", exc_info=True)
             
+
             # Sort by score and limit results
-            results.sort(key=lambda x: x["score"], reverse=True)
-            return results[:limit]
-            
+                results.sort(key=lambda x: x["score"], reverse=True)
+                final_results = results[:limit]
+                logger.info(f"Final results: {len(final_results)}")
+                for i, r in enumerate(final_results):
+                    logger.info(f"Result {i}: score={r['score']}, content={r['entry'].content[:50]}...")
+                    
+                return final_results
+                
         except Exception as e:
-            logger.error(f"Error searching index: {e}")
+            logger.error(f"Error searching index: {e}", exc_info=True)
             return []
     
+
     async def get_recent(self,
         hours: Optional[int] = None,
         entry_types: Optional[List[EntryType]] = None,
@@ -220,7 +311,7 @@ class LlamaIndexImpl(MSIndexBase):
             matching_docs = []
             for doc_id in self.index.storage_context.docstore.docs:
                 doc = self.index.storage_context.docstore.get_document(doc_id)
-                if self._matches_filter(doc.metadata, metadata_filter):
+                if doc is not None and self._matches_filter(doc.metadata, metadata_filter):
                     matching_docs.append(doc)
             
             # Sort by creation time and convert to entries
