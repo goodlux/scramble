@@ -2,28 +2,51 @@
 from typing import Literal
 from datetime import datetime
 from rich.console import Console
+from ..coordinator.coordinator import Coordinator   
 
-from ..coordinator.coordinator import Coordinator
+from .interface_base import InterfaceBase
+
 
 PromptStyle = Literal["minimal", "cyberpunk", "terminal", "scroll"]
 
-class RambleInterface():
-    """Base class for Ramble interfaces with shared UI functionality."""
-    
+class RambleInterface(InterfaceBase):
     def __init__(self):
         super().__init__()
-        self.console = Console()
-        self.prompt_style: PromptStyle = "cyberpunk"  # Ramble default
+        
+
+    async def setup(self) -> None:
+        """Setup the interface."""
+        if self._setup_complete:
+            return
+            
+        
+        # Create coordinator before trying to use it
         self.coordinator = Coordinator()
-    
+        await self.coordinator.initialize()
+        await self.coordinator.add_model('claude-3-opus')
+        self._setup_complete = True
+
     def format_prompt(self) -> str:
         """Format prompt based on current style."""
-        timestamp = datetime.now().strftime("%H:%M")
-        
-        if self.prompt_style == "cyberpunk":
-            # First line
-            line1 = f"[bold blue]╭─[/bold blue][bold cyan]ramble[/bold cyan] [dim]{timestamp}[/dim]"
-            # Second line with no newline
-            line2 = f"[bold blue]╰─[/bold blue][bold green]>[/bold green]"
-            
-            return f"{line1}\n{line2}" 
+        return ">>>>>>"  # Default prompt style
+    
+    async def display_output(self, content: str) -> None:
+        """Display output to the user."""
+        print(content)
+    
+    async def display_error(self, message: str) -> None:
+        """Display error message."""
+        print(f"[red]Error: {message}[/red]")
+    
+    async def display_status(self, message: str) -> None:
+        """Display status message."""
+        print(f"[dim]{message}[/dim]")
+    
+    async def get_input(self) -> str:
+        """Get input from user."""
+        return input(self.format_prompt())
+    
+    async def clear(self) -> None:
+        """Clear the display."""
+        import os
+        os.system('clear' if os.name == 'posix' else 'cls')

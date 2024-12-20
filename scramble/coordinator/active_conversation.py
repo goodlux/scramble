@@ -1,5 +1,5 @@
 """Manages active conversation sessions."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import asyncio
 from typing import Set, List, Optional, Dict, Any

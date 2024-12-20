@@ -1,0 +1,88 @@
+# Example configuration files for many LiteLLM providers.
+# You can copy this to your providers.yaml file. If a provider isn't in this list,
+# you can create a new one in your providers.yaml file. The {model_id} will be filled
+# with whatever you put in the model_id field in your models.yaml file.
+#
+# Of special note:
+#
+# Google uses gemini, where most providers use their name: "gemini/{model_id}"
+# OpenAi does not use anything before the model_id: "{model_id}"
+#
+# Both of these should work copied as is
+#
+#
+providers:
+  anthropic:
+    format: "anthropic/{model_id}"
+    api_key: "default_anthropic_key_replace_me"
+    description: "Anthropic's Claude models"
+
+  anthropic-aws:
+    format: "anthropic-aws/{model_id}"
+    api_key: "default_anthropic_aws_key_replace_me"
+    description: "Anthropic models on AWS"
+
+  azure:
+    format: "azure/{model_id}"
+    api_key: "default_azure_key_replace_me"
+    description: "Azure OpenAI models"
+
+  bedrock:
+    format: "bedrock/{model_id}"
+    api_key: "default_bedrock_key_replace_me"
+    description: "AWS Bedrock models"
+
+  cohere:
+    format: "cohere/{model_id}"
+    api_key: "default_cohere_key_replace_me"
+    description: "Cohere models"
+
+  google:
+    format: "gemini/{model_id}" ### Important! Unlike other providers, Google uses the format "gemini/{model_id}"
+    api_key: "default_google_key_replace_me"
+    description: "Google AI models including Gemini"
+
+  huggingface:
+    format: "huggingface/{model_id}"
+    api_key: "default_huggingface_key_replace_me"
+    description: "Hugging Face models and endpoints"
+
+  mistral:
+    format: "mistral/{model_id}"
+    api_key: "default_mistral_key_replace_me"
+    description: "Mistral AI models"
+
+  openai:
+    format: "{model_id}"
+    api_key: "default_openai_key_replace_me"
+    description: "OpenAI models including GPT-4 and DALL-E"
+
+  palm:
+    format: "palm/{model_id}"
+    api_key: "default_palm_key_replace_me"
+    description: "Google PaLM models"
+
+  replicate:
+    format: "replicate/{model_id}"
+    api_key: "default_replicate_key_replace_me"
+    description: "Replicate-hosted models"
+
+  sagemaker:
+    format: "sagemaker/{model_id}"
+    api_key: "default_sagemaker_key_replace_me"
+    description: "AWS SageMaker deployed models"
+
+  together:
+    format: "together/{model_id}"
+    api_key: "default_together_key_replace_me"
+    description: "Together.ai hosted models"
+
+  vertex_ai:
+    format: "vertex_ai/{model_id}"
+    api_key: "default_vertex_ai_key_replace_me"
+    description: "Google Cloud Vertex AI models"
+
+  vllm:
+    format: "vllm/{model_id}"
+    api_key: "default_vllm_key_replace_me"
+    description: "VLLM-deployed models"

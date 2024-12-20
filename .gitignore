@@ -49,3 +49,7 @@ data/nltk_data/tokenizers/punkt_tab/
 # System Files
 .DS_Store
 **/.DS_Store
+
+scramble/config/models.yaml
+scramble/config/providers.yaml
+

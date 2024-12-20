@@ -144,6 +144,10 @@ class LlamaIndexImpl(MSIndexBase):
     async def add_entry(self, entry: MSEntry) -> bool:
         """Add an entry to the index."""
         try:
+             # Add debug logging for ChromaDB collection size
+            collection_size = self.collection.count()
+            logger.info(f"Current ChromaDB collection size: {collection_size}")
+        
             # Check if we already have a version of this content
             existing_docs = self.index.storage_context.docstore.docs
             for doc_id, doc in existing_docs.items():
@@ -266,7 +270,6 @@ class LlamaIndexImpl(MSIndexBase):
                         "score": getattr(node, 'score', 1.0),
                         "relevance_score": getattr(node, 'relevance_score', 1.0)
                     }
-
                     results.append(result)
                     logger.info(f"Added result: {result}")
                  
@@ -275,13 +278,13 @@ class LlamaIndexImpl(MSIndexBase):
             
 
             # Sort by score and limit results
-                results.sort(key=lambda x: x["score"], reverse=True)
-                final_results = results[:limit]
-                logger.info(f"Final results: {len(final_results)}")
-                for i, r in enumerate(final_results):
-                    logger.info(f"Result {i}: score={r['score']}, content={r['entry'].content[:50]}...")
-                    
-                return final_results
+            results.sort(key=lambda x: x["score"], reverse=True)
+            final_results = results[:limit]
+            logger.info(f"Final results: {len(final_results)}")
+            for i, r in enumerate(final_results):
+                logger.info(f"Result {i}: score={r['score']}, content={r['entry'].content[:50]}...")
+                
+            return final_results
                 
         except Exception as e:
             logger.error(f"Error searching index: {e}", exc_info=True)

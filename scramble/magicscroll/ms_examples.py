@@ -18,13 +18,25 @@ async def test_magicscroll():
     print(f"Added second conversation: {conv2_id}")
     
     # Test semantic search
+    print("\nSemantic Search Results':")
     print("\nSearching for 'consciousness':")
-    results = await scroll.remember("consciousness and the mind", limit=2)
+    results = await scroll.remember("consciousness and the mind", limit=2, min_score=0.0)  # Set min_score to 0
     print(f"Found {len(results)} results")
     for idx, result in enumerate(results, 1):
         print(f"\nResult {idx}:")
         print(f"Score: {result['score']:.3f}")
-        print(f"Content: {result['entry'].content}")
+        #print(f"Content: {result['entry'].content}")
+        print(f"Created: {result['entry'].created_at}")
+
+    # Add a second different search to test
+    print("\nSemantic Search Results':")
+    print("\nSearching for 'neural networks':")
+    results = await scroll.remember("neural networks", limit=2, min_score=0.0)  # Set min_score to 0
+    print(f"Found {len(results)} results")
+    for idx, result in enumerate(results, 1):
+        print(f"\nResult {idx}:")
+        print(f"Score: {result['score']:.3f}")
+        #print(f"Content: {result['entry'].content}")
         print(f"Created: {result['entry'].created_at}")
 
 # Run the test

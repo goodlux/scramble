@@ -1,79 +1,95 @@
 """Base class for Scramble's LLM models."""
-from typing import Optional, Dict, Any, List, AsyncGenerator, Union
-from abc import ABC, abstractmethod
-import logging
+from typing import Dict, Any, AsyncGenerator, Union, List, Literal, TypedDict
 from datetime import datetime
-
-from llmharness.llm_model import LLMModel as HarnessModel
-from ..tool.tool_registry import ToolRegistry
+import asyncio
+import time
+import logging
+from .model_base import ModelBase
 
 logger = logging.getLogger(__name__)
 
-class LLMModelBase(HarnessModel, ABC):
-    """Base class adding Scramble-specific features to LLMHarness models."""
-    
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize the model with Scramble features.
-        
-        Args:
-            config: Model configuration
-        """
-        super().__init__()
-        self.config = config or {}
-        self.tool_registry = ToolRegistry()
-        self.context_buffer: List[Dict[str, Any]] = []
-        self.max_context_length = self.config.get("max_context_length", 4096)
-    
-    async def generate_response(
-        self, 
-        prompt: str,
-        stream: bool = False,
-        **kwargs
-    ) -> Union[str, AsyncGenerator[str, None]]:
-        """Generate a response using the model.
-        
-        Args:
-            prompt: The input prompt
-            stream: Whether to stream the response
-            **kwargs: Additional parameters
-            
-        Returns:
-            The model's response
-        """
-        try:
-            # Format prompt with context
-            formatted_prompt = self._format_prompt_with_context(prompt)
-            
-            # Check for tool calls
-            if self._contains_tool_call(formatted_prompt):
-                return await self._handle_tool_call(formatted_prompt)
-            
-            # Generate response through harness
-            response = await self.complete(
-                harness=self.harness,
-                prompt=formatted_prompt,
-                stream=stream,
-                **kwargs
-            )
-            
-            # Update context buffer
-            self._update_context_buffer(prompt, response)
-            
-            return response
-            
-        except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            raise
-    
-    def _format_prompt_with_context(self, prompt: str) -> str:
-        """Format the prompt with current context buffer."""
-        context_str = "\n".join(
-            f"{msg['role']}: {msg['content']}" 
-            for msg in self.context_buffer[-5:]  # Last 5 messages for context
-        )
-        
-        return f"""Previous conversation:
-{context_str}
+# Type definitions for message handling
+Role = Literal["user", "assistant", "system"]
 
-Current message:
-User: {prompt}
+class Message(TypedDict):
+    """Type for standardized message format."""
+    role: Role
+    content: str
+    timestamp: str
+    metadata: Dict[str, Any]
+
+class LLMModelBase(ModelBase):
+    """Base class adding Scramble-specific features to LLM models."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize the model with configuration."""
+        if not config or "model" not in config:
+            raise ValueError("Model configuration must include model name")
+            
+        self.model_name = config["model"]
+        self.config = config
+        self.rate_limit = config.get("rate_limit", 2.0)
+        self._last_request = 0.0
+        
+        # Context management - using standardized message format
+        self.max_context_length = config.get("max_context_length", 4096)
+        self.context_buffer: List[Message] = []
+        self.system_message: str | None = config.get("system_message")
+
+    # ... rest of the implementation stays the same ...
+
+    def _add_to_context(
+        self,
+        role: Role,  # Now properly typed
+        content: str,
+        metadata: Dict[str, Any] | None = None
+    ) -> None:
+        """Add a message to the context buffer."""
+        message: Message = {
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now().isoformat(),
+            "metadata": metadata or {}
+        }
+        self.context_buffer.append(message)
+        self._trim_context_if_needed()
+
+    def _trim_context_if_needed(self) -> None:
+        """Trim context buffer if it exceeds max length."""
+        max_messages = self.config.get("max_context_messages", 10)
+        if len(self.context_buffer) > max_messages:
+            if self.system_message:
+                system_message: Message = {
+                    "role": "system",
+                    "content": self.system_message,
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {}
+                }
+                self.context_buffer = (
+                    [system_message] +
+                    self.context_buffer[-(max_messages-1):]
+                )
+            else:
+                self.context_buffer = self.context_buffer[-max_messages:]
+
+    def _format_context_for_provider(self) -> List[Dict[str, str]]:
+        """Format context buffer for provider API.
+        
+        Returns list of messages in standard format:
+        [{"role": "user", "content": "..."}, ...]
+        """
+        messages: List[Dict[str, str]] = []
+        
+        if self.system_message:
+            messages.append({
+                "role": "system",
+                "content": self.system_message
+            })
+        
+        for msg in self.context_buffer:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+            
+        return messages

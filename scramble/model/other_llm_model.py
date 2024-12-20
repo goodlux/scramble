@@ -10,10 +10,12 @@ class OtherLLMModel(LLMModelBase):
     """Model implementation using LiteLLM."""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        # Ensure config is a dict before passing to super
+        config = config or {}
         super().__init__(config)
-        self.model_name = config.get("model", "claude-3-sonnet")
         
-        # Initialize any model-specific parameters
+        # Get parameters with defaults if not specified
+        self.model_name = config["model"]  # This is required
         self.max_context_length = config.get("max_context_length", 4096)
         self.temperature = config.get("temperature", 0.7)
         
