@@ -23,7 +23,7 @@ class RambleInterface(InterfaceBase):
         # Create coordinator before trying to use it
         self.coordinator = Coordinator()
         await self.coordinator.initialize()
-        await self.coordinator.add_model('claude-3-opus')
+        await self.coordinator.add_model('sonnet')
         self._setup_complete = True
 
     def format_prompt(self) -> str:

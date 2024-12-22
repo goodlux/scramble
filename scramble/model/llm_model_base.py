@@ -5,6 +5,7 @@ import asyncio
 import time
 import logging
 from .model_base import ModelBase
+from ..core.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -21,22 +22,50 @@ class Message(TypedDict):
 class LLMModelBase(ModelBase):
     """Base class adding Scramble-specific features to LLM models."""
     
-    def __init__(self, config: Dict[str, Any]):
-        """Initialize the model with configuration."""
-        if not config or "model" not in config:
-            raise ValueError("Model configuration must include model name")
-            
-        self.model_name = config["model"]
-        self.config = config
-        self.rate_limit = config.get("rate_limit", 2.0)
+    @classmethod
+    async def create(cls, model_name: str) -> "LLMModelBase":
+        """Create and initialize a new model instance.
+        Args:
+            model_name: Friendly name/key for the model (e.g., 'sonnet')
+        """
+        self = cls(model_name)
+        await self.initialize()
+        return self
+    
+    def __init__(self, model_name: str):
+        """Initialize the model.
+        Args:
+            model_name: Friendly name/key for the model (e.g., 'sonnet')
+        """
+        self.model_name = model_name        # 'sonnet'
+        self.model_id: str | None = None    # 'claude-3-sonnet-20240229'
+        self.config: Dict[str, Any] = {}
+        self.rate_limit = 2.0
         self._last_request = 0.0
         
         # Context management - using standardized message format
-        self.max_context_length = config.get("max_context_length", 4096)
+        self.max_context_length = 4096
         self.context_buffer: List[Message] = []
-        self.system_message: str | None = config.get("system_message")
+        self.system_message: str | None = None
 
-    # ... rest of the implementation stays the same ...
+    async def initialize(self) -> None:
+        """Initialize the model with configuration."""
+        config_manager = ConfigManager()
+        self.config = await config_manager.get_model_config(self.model_name)
+        self.model_id = self.config["model_id"]
+        
+        # Provider-specific initialization
+        await self._initialize_client()
+        if not self.validate_config():
+            raise ValueError("Invalid configuration")
+            
+        # Provider-specific initialization
+        await self._initialize_client()
+
+    async def _initialize_client(self) -> None:
+        """Initialize provider-specific client. Must be implemented by subclasses."""
+        raise NotImplementedError
+
 
     def _add_to_context(
         self,

@@ -1,36 +1,23 @@
 """Anthropic Claude model implementation using official SDK."""
-from typing import Dict, Any, AsyncGenerator, List, Literal, TypedDict, cast
+from typing import Dict, Any, AsyncGenerator, List, cast
 from anthropic import AsyncAnthropic
-from anthropic.types import MessageParam
+from anthropic.types import MessageParam, ModelParam
 import logging
 from .llm_model_base import LLMModelBase
 
 logger = logging.getLogger(__name__)
 
-# Type definitions
-Role = Literal["user", "assistant"]
-
-class APIMessage(TypedDict):
-    """Type for API-compatible message format."""
-    role: Role
-    content: str
-
 class AnthropicLLMModel(LLMModelBase):
     """Implementation for Anthropic Claude models using official SDK."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, model_name: str):
         """Initialize the Anthropic model."""
-        super().__init__(config)
-        
-        # Claude-specific context settings
-        self.max_context_length = 128_000  # Claude 3 context window
+        super().__init__(model_name)
         self.client: AsyncAnthropic | None = None
+        self.max_context_length = 128_000  # Claude 3 context window
 
-    async def initialize(self) -> None:
+    async def _initialize_client(self) -> None:
         """Initialize the Anthropic client."""
-        if not self.validate_config():
-            raise ValueError("Invalid configuration")
-            
         self.client = AsyncAnthropic(
             api_key=self.config["api_key"]
         )
@@ -39,48 +26,46 @@ class AnthropicLLMModel(LLMModelBase):
         """Validate the configuration."""
         if not super().validate_config():
             return False
-            
+                
+        # Just check we have the bare minimum needed
         if "api_key" not in self.config:
-            logger.error("Anthropic API key required in config")
+            logger.error("API key missing from config")
             return False
-            
-        # Validate model name format
-        valid_prefixes = ["claude-3-", "claude-2"]
-        if not any(self.model_name.startswith(prefix) for prefix in valid_prefixes):
-            logger.error(f"Invalid model name format: {self.model_name}")
+                
+        if not self.model_name:
+            logger.error("Model name missing from config")
             return False
-            
+                
         return True
 
-    def _create_message(self, role: Role, content: str) -> MessageParam:
-        """Create a properly typed message for the Anthropic API."""
+    async def generate_response(self, prompt: str, **params: Any) -> str:
+        """Generate a response using the model."""
+        if not self.client or not self.model_id:
+            raise RuntimeError("Model not initialized")
+
+        try:
+            response = await self.client.messages.create(
+                model=cast(ModelParam, self.model_id),  # Use model_id here
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=params.get("max_tokens", 4096),
+                temperature=params.get("temperature", 0.7)
+            )
+            
+            if response.content and len(response.content) > 0:
+                first_block = response.content[0]
+                return getattr(first_block, 'text', '')
+            return ""
+            
+        except Exception as e:
+            logger.error(f"Anthropic API error: {str(e)}")
+            raise
+
+    def _create_anthropic_message(self, role: str, content: str) -> MessageParam:
+        """Create a message in Anthropic's format."""
         return cast(MessageParam, {
             "role": role,
             "content": content
         })
-
-    def _format_messages_for_anthropic(self) -> List[MessageParam]:
-        """Convert context buffer to Anthropic message format."""
-        messages: List[MessageParam] = []
-        
-        # Handle system message as a user message for Claude 3
-        if self.system_message:
-            messages.append(self._create_message(
-                "user",
-                f"System: {self.system_message}"
-            ))
-        
-        for msg in self.context_buffer:
-            # Only include messages with valid roles
-            if msg["role"] not in ["user", "assistant"]:
-                continue
-                
-            messages.append(self._create_message(
-                cast(Role, msg["role"]),
-                msg["content"]
-            ))
-            
-        return messages
 
     async def _generate_completion(
         self,
@@ -88,25 +73,23 @@ class AnthropicLLMModel(LLMModelBase):
         **params: Any
     ) -> str:
         """Generate completion using Anthropic client."""
-        if not self.client:
+        if not self.client or not self.model_name:
             await self.initialize()
-            if not self.client:
+            if not self.client or not self.model_name:
                 raise RuntimeError("Failed to initialize client")
 
         try:
-            # Format messages properly
-            api_messages = params.get("messages", [])
-            if not api_messages:
-                api_messages = [self._create_message("user", prompt)]
+            messages = params.get("messages", [])
+            if not messages:
+                messages = [self._create_anthropic_message("user", prompt)]
 
             response = await self.client.messages.create(
-                model=self.model_name,
-                messages=api_messages,
+                model=cast(ModelParam, self.model_name),
+                messages=messages,
                 max_tokens=params.get("max_tokens", 4096),
                 temperature=params.get("temperature", 0.7)
             )
             
-            # Extract text from response
             if response.content and len(response.content) > 0:
                 first_block = response.content[0]
                 return getattr(first_block, 'text', '')
@@ -122,32 +105,28 @@ class AnthropicLLMModel(LLMModelBase):
         **params: Any
     ) -> AsyncGenerator[str, None]:
         """Stream completion using Anthropic client."""
-        if not self.client:
+        if not self.client or not self.model_name:
             await self.initialize()
-            if not self.client:
+            if not self.client or not self.model_name:
                 raise RuntimeError("Failed to initialize client")
 
         try:
-            # Format messages properly
-            api_messages = params.get("messages", [])
-            if not api_messages:
-                api_messages = [self._create_message("user", prompt)]
+            messages = params.get("messages", [])
+            if not messages:
+                messages = [self._create_anthropic_message("user", prompt)]
 
-            stream = await self.client.messages.create(
-                model=self.model_name,
-                messages=api_messages,
+            async with self.client.messages.stream(
+                model=cast(ModelParam, self.model_name),
+                messages=messages,
                 max_tokens=params.get("max_tokens", 4096),
-                temperature=params.get("temperature", 0.7),
-                stream=True
-            )
-            
-            async for chunk in stream:
-                # For streaming, we need to check the type and extract text safely
-                if hasattr(chunk, 'type') and chunk.type == 'content_block_delta':
-                    if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text'):
-                        text = getattr(chunk.delta, 'text', '')
-                        if text:
-                            yield str(text)
+                temperature=params.get("temperature", 0.7)
+            ) as stream:
+                async for chunk in stream:
+                    if hasattr(chunk, 'type') and chunk.type == 'content_block_delta':
+                        if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text'):
+                            text = getattr(chunk.delta, 'text', '')
+                            if text:
+                                yield str(text)
                         
         except Exception as e:
             logger.error(f"Anthropic API error: {str(e)}")
@@ -155,8 +134,12 @@ class AnthropicLLMModel(LLMModelBase):
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about model capabilities."""
+        if not self.model_name:
+            raise RuntimeError("Model not initialized")
+            
+        model_name = self.model_name
         return {
-            "name": self.model_name,
+            "name": model_name,
             "provider": "Anthropic",
             "capabilities": [
                 "chat",
@@ -166,8 +149,14 @@ class AnthropicLLMModel(LLMModelBase):
                 "math",
                 "reasoning"
             ],
-            "max_tokens": 4096 if "opus" in self.model_name or "sonnet" in self.model_name else 1024,
+            "max_tokens": 4096 if (
+                "opus" in model_name or 
+                "sonnet" in model_name
+            ) else 1024,
             "supports_system_message": True,
             "supports_functions": True,
-            "supports_vision": "opus" in self.model_name or "sonnet" in self.model_name
+            "supports_vision": (
+                "opus" in model_name or 
+                "sonnet" in model_name
+            )
         }

@@ -5,7 +5,9 @@ import yaml
 from pathlib import Path
 
 from .active_conversation import ActiveConversation
-from ..model.other_llm_model import OtherLLMModel
+from ..model.anthropic_llm_model import AnthropicLLMModel 
+from ..model.llm_model_base import LLMModelBase
+
 from ..magicscroll.magic_scroll import MagicScroll
 
 logger = logging.getLogger(__name__)
@@ -16,13 +18,9 @@ class Coordinator:
     def __init__(self):
         """Initialize the coordination system."""
         self.scroll: Optional[MagicScroll] = None
-        self.active_models: Dict[str, OtherLLMModel] = {}
+        self.active_models: Dict[str, LLMModelBase] = {}
         self.conversation: Optional[ActiveConversation] = None
         
-        # Load model configurations
-        config_path = Path("llmharness/config/models.yaml")
-        with open(config_path) as f:
-            self.model_configs = yaml.safe_load(f)["models"]
     
     async def initialize(self) -> None:
         """Initialize the coordinator."""
@@ -33,30 +31,22 @@ class Coordinator:
             logger.error(f"Failed to initialize core systems: {e}")
             raise
 
-    async def add_model(self, model_type: str) -> None:
+    async def add_model(self, model_name: str) -> None:
         """Add a new model to the active set."""
         try:
-            # Check if model exists in config
-            if model_type not in self.model_configs:
-                raise ValueError(f"Model {model_type} not found in configuration")
-
-            model_config = {
-                "model": model_type,
-                "parameters": self.model_configs[model_type].get("parameters", {})
-            }
-            
-            model = OtherLLMModel(config=model_config)
-            self.active_models[model_type] = model
+            model = await AnthropicLLMModel.create(model_name)
+            self.active_models[model_name] = model
             
             # Add to active conversation if one exists
             if self.conversation:
-                self.conversation.add_model(model_type)
+                self.conversation.add_model(model_name)
                 
-            logger.info(f"Added model: {model_type}")
-            
+            logger.info(f"Added model: {model_name}")
+        
         except Exception as e:
-            logger.error(f"Failed to add model {model_type}: {e}")
+            logger.error(f"Failed to add model {model_name}: {e}")
             raise
+
 
     async def remove_model(self, model_name: str) -> None:
         """Remove a model from the active set."""

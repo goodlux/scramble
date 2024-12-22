@@ -1,3 +1,8 @@
+"""
+DEPRECATED: This interface is being replaced
+Keeping for reference until new interface is fully implemented.
+"""
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any

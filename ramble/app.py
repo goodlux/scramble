@@ -22,7 +22,7 @@ DEFAULT_CONFIG: AppConfig = {
     'ui': {
         'prompt_style': 'cyberpunk'
     },
-    'model': 'claude-3-sonnet-20240229'  # Current model name
+    'model_name': 'sonnet'  # Current model name
 }
 
 class RambleCLI:
