@@ -23,6 +23,7 @@ build/
 results/
 .results/
 test_results/
+.pytest_cache/
 
 # Model & Data Caches
 .cache/
@@ -42,6 +43,10 @@ test_results/
 .ramble/
 store/
 *.pkl
+dump.rdb
+*.db
+*.sqlite3
+*.sqlite
 
 # NLTK Data
 data/nltk_data/tokenizers/punkt_tab/
@@ -50,6 +55,9 @@ data/nltk_data/tokenizers/punkt_tab/
 .DS_Store
 **/.DS_Store
 
-scramble/config/models.yaml
-scramble/config/providers.yaml
+# Config Files
+scramble/model_config/models.yaml
+scramble/model_config/providers.yaml
 
+
+dump.rdb

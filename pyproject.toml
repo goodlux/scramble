@@ -13,12 +13,34 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License"
 ]
-
-
+dependencies = [
+    "rich",
+    "nltk",
+    "anthropic",
+    "click",
+    "sentence-transformers>=2.5.0",
+    "numpy",
+    "dateparser",
+    "litellm==1.12.1",
+    "textual",
+    "pyte",
+    "redis>=5.0.1",
+    "chromadb>=0.4.22",
+    "llama-index-core>=0.10.0",
+    "llama-index-embeddings-huggingface>=0.1.0",
+    "llama-index-vector-stores-chroma>=0.1.0",
+    "llama-index-storage-docstore-redis>=0.1.0",
+    "llama-index-storage-index-store-redis>=0.1.0",
+    "duckdb",
+    "torch"
+]
 
 [project.scripts]
-ramble = "ramble.app:cli"  # Updated path for the new structure
+ramble = "ramble.app:cli"
 maxx = "ramblemaxx.app:RambleMaxx.run" 
 
 [tool.hatch.build.targets.wheel]
-packages = ["scramble", "ramble", "ramblemaxx"]  # Updated to include both packages
+packages = ["scramble", "ramble", "ramblemaxx"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
