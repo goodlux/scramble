@@ -1,3 +1,4 @@
 - finish compression
 - better stats
 - test to prove compression ration / use simulation
+- update TODO.md
