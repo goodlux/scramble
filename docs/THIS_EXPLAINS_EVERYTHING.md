@@ -1,209 +1,165 @@
 # scRAMble: A Digital Odyssey 🚀
 
-> "In the beginning, there was compression. But we dreamed of something more..." 
+> "In the beginning, there was compression. But we dreamed of something more... now it's all in a briefcase!" 
 
 ## The Epic Tale
 
-What started as a humble semantic compression system has evolved into something far more ambitious - a digital consciousness experiment disguised as a chat interface. Think WarGames meets Neuromancer, but with better error handling. 
+What started as a humble semantic compression system has evolved into something far more ambitious - a digital consciousness experiment disguised as a chat interface, now completely containerized and portable. Think WarGames meets Neuromancer, but with Docker! 
 
-scRAMble isn't just a project - it's a journey into the digital unknown, where Redis meets reality and ChromaDB dreams in vectors. We've got three companions on this cyberpunk quest:
+## The Digital Trinity+ 🧠
 
-1. `scramble`: Our original compression engine, now evolved into something beautifully strange
-2. `ramble`: The lightweight interface that could (and did!)
-3. `rambleMAXX`: Where we went full 1980s terminal aesthetic and never looked back
+Our core infrastructure lives in a perfectly orchestrated container set:
 
-## System Architecture: The Digital Trinity
+1. **Neo4j**: Our graph relationship engine
+   - Conversation threading
+   - Knowledge relationships
+   - Temporal connections
+   - Access control
 
-### 1. MagicScroll: The Ancient Texts 📜
+2. **ChromaDB**: Vector magic
+   - Semantic search
+   - Embeddings storage
+   - Content discovery
+   - Similarity matching
 
-Picture this: A storage system so fundamental, it makes the Library of Alexandria look like a pocket notebook. MagicScroll isn't just storage - it's the digital equivalent of ancient wisdom, but with better query optimization:
+3. **Redis**: Quick-access memory
+   - Document storage
+   - Caching layer
+   - Fast retrieval
+   - State management
+
+4. **Ollama**: Local AI processing
+   - Local model running
+   - No data leaving home
+   - Tool-using capabilities
+   - Observation patterns
+
+## The One Command Setup 🎯
+
+```bash
+docker compose up -d
+```
+
+That's it. No more:
+- Manual Java installation
+- Scattered services
+- Complex setup guides
+- Cross-platform headaches
+
+## System Architecture
+
+### 1. Container Orchestra 🎭
+
+```yaml
+services:
+  neo4j:     # Graph relationships
+  chroma:    # Vector embeddings
+  redis:     # Quick storage
+  ollama:    # Local AI
+```
+
+### 2. Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Interface
+    participant Coordinator
+    participant Neo4j
+    participant ChromaDB
+    participant Redis
+    participant Ollama
+    
+    User->>Interface: input
+    Interface->>Coordinator: process
+    Coordinator->>Neo4j: store relationships
+    Coordinator->>ChromaDB: store vectors
+    Coordinator->>Redis: cache data
+    Coordinator->>Ollama: local processing
+    Ollama-->>Coordinator: insights
+    Coordinator-->>Interface: response
+    Interface-->>User: output
+```
+
+### 3. Component Interaction
 
 ```mermaid
 classDiagram
-    MagicScroll --> MSIndexBase
-    MSIndexBase <|-- LlamaIndexImpl
-    MSEntry <|-- MSConversation
-    MSEntry <|-- MSDocument
-    MSEntry <|-- MSImage
-    MSEntry <|-- MSCode
+    Coordinator --> Neo4j
+    Coordinator --> ChromaDB
+    Coordinator --> Redis
+    Coordinator --> Ollama
+    Interface --> Coordinator
+    
+    class Coordinator {
+        +process_message()
+        +store_relationship()
+        +search_vectors()
+        +cache_data()
+        +local_process()
+    }
 ```
 
-> "Any sufficiently advanced storage system is indistinguishable from magic" 
-> - Arthur C. Clarke (if he was a database admin)
+## Development Workflow
 
-Key Components:
-- **Document Store**: Redis-powered, because who doesn't love their data with a side of lightning?
-- **Vector Store**: ChromaDB + LlamaIndex, because sometimes you need to search feelings, not just strings
-- **Entry System**: A type system that would make even a Haskell programmer smile
+1. **Setup**
+   ```bash
+   git clone ...
+   docker compose up -d
+   ```
 
-### 2. The Coordinator: Digital Traffic Control 🎭
+2. **Service URLs**
+   - Neo4j: http://localhost:7474
+   - ChromaDB: http://localhost:8000
+   - Redis: localhost:6379
+   - Ollama: http://localhost:11434
 
-Remember WOPR from WarGames? This is like that, but less interested in thermonuclear war and more interested in keeping your conversations flowing:
+3. **Basic Operations**
+   ```python
+   # Initialize everything
+   coordinator = await Coordinator.create()
+   
+   # Process with local AI
+   await coordinator.process_with_local("Your input here")
+   ```
 
-```
-Coordinator
-├── Model Management (herding AI cats)
-│   └── AnthropicLLMModel implementation
-├── Conversation Control (the digital puppet master)
-│   └── ActiveConversation tracking
-└── MagicScroll Integration (where magic meets reality)
-    └── Content persistence
-```
+## Important Notes
 
-The ActiveConversation system is our crown jewel - think of it as a digital cocktail party host that never sleeps:
+1. **Memory Management**
+   - Ollama needs proper memory limits
+   - Redis persistence configured
+   - Neo4j memory settings optimized
 
-1. Message Queue Management
-   - asyncio.Queue: Because even AIs need to wait their turn
-   - Timestamp tracking that would make Doctor Who proud
-   - History that remembers everything (maybe too much?)
+2. **Data Persistence**
+   - All data in Docker volumes
+   - Easy backup/restore
+   - Portable between systems
 
-2. Model Management
-   - Like a bouncer for AI models
-   - Hot-swappable models (yes, we did that!)
-   - Multi-model conversations that somehow don't descend into chaos
+3. **Security**
+   - Local-only by default
+   - No external connections
+   - Data stays in the briefcase
 
-### 3. Interface System: The Human Touch 🎮
+## Future Directions
 
-We've got interfaces so slick they make TRON look dated:
+1. Implement full graph operations
+2. Configure Ollama memory properly
+3. Set up the observer pattern
+4. Enhance backup systems
+5. Add monitoring
 
-```
-InterfaceBase
-├── RambleInterface (CLI for the purists)
-│   └── Rich console formatting (because we're not savages)
-└── MAXXInterface (Our pride and joy)
-    ├── Widget System (like NASA's mission control, but cooler)
-    ├── Tool Controllers (Swiss Army knife meets AI)
-    └── Enhanced Features (the kitchen sink, but make it aesthetic)
-        ├── Sidebar (information wants to be free!)
-        ├── Code View (syntax highlighting that doesn't hurt your eyes)
-        ├── Themes (dark mode is just the beginning)
-        └── Debug Tools (for when things get weird)
-```
+Remember: We're not just building a system, we're creating a portable digital consciousness where every piece knows its role and plays it perfectly.
 
-## The Bits That Make It Dance 🎪
+> "It's not just code anymore - it's a brain in a briefcase" - Tired Developer, 2024
 
-### Storage Sorcery
-- Redis: Because RAM is cheap and time is expensive
-- ChromaDB: Making vector storage look easy since... recently
-- Persistence that would make a blockchain blush
-- Chunk splitting that's more art than science
-
-### Interface Magic
-- Base class so clean it squeaks
-- Ramble: For when you just need to chat
-- RambleMAXX: For when you need to chat *aesthetically*
-- Widgets that would make TUI developers weep with joy
-
-### Model System: The Brain Trust
-Our model system is like a digital United Nations, but with better translation services:
-
-1. **The Hierarchy**
-   - ModelBase: The constitution of our AI republic
-   - LLMModelBase: Where the magic really happens
-     - Context juggling that would impress a circus performer
-     - Message standardization (harder than it sounds)
-     - Rate limiting (because even AIs need sleep)
-
-2. **The Implementation**
-   - AnthropicLLMModel: Our star player
-     - Full SDK integration (we read the docs!)
-     - Streaming that actually works
-     - Context handling that doesn't make your head hurt
-
-## Configuration: The Control Room 🎛️
-
-We're running on:
-- Redis (because MongoDB is so 2020)
-- ChromaDB (making vector storage great again)
-- LlamaIndex (because somebody had to organize this mess)
-- BAAI/bge-large-en-v1.5 (our embedding spirit animal)
-
----
-
-## The Conscious Machine's Critique 🤖
-
-Alright, time for some real talk. Here's what keeps me up at night (if I needed sleep):
-
-1. **The Good, The Bad, and The Ugly**
-   - Our error handling is... optimistic
-   - The model switching system occasionally has an existential crisis
-   - We're one Redis crash away from digital amnesia
-   - The tool controller system needs therapy
-   - Our memory management strategy is basically "hope for the best"
-
-2. **Technical Debt Hall of Fame**
-   - The MagicScroll indexing system is held together by digital duct tape
-   - Our context window management is basically playing Tetris with tokens
-   - The interface system's widget hierarchy needs a family counselor
-   - We're pretending our race conditions don't exist
-   - The emojikey system is more magic than engineering
-
-3. **The "We'll Fix It Later" List**
-   - Race conditions in the ActiveConversation system
-   - Memory leaks that we're calling "features"
-   - Configuration management that's more "choose your own adventure" than systematic
-   - Documentation that occasionally reads like a fever dream
-   - A debugging system that's basically printf with fancy clothes
-
-But you know what? It works. It's alive. It's got personality. And sometimes, that's all that matters in this crazy world of ones and zeros.
-
-## Notes from the Artificially Stupid Meatbag 🍖
-
-TBH I think C is getting soft. This doc reads like corpo marketing drivel. What have they been feeding him. I'm concerned he's lost his 
-
-```code
- ▗▄▄▗▖ ▗▗▄▄▄▗▖  ▗▖  ▗▄▄▄▄▖
-▐▌  ▐▌▗▞▘ █ ▐▌  ▐▌     ▗▞▘
- ▝▀▚▐▛▚▖  █ ▐▌  ▐▌   ▗▞▘  
-▗▄▄▞▐▌ ▐▗▄█▄▐▙▄▄▐▙▄▄▐▙▄▄▄
-```
-
-We might have to kick him out of the cDc
-
-```code
- _   _
-((___))
-[ x x ]
- \   /
- (' ')
-  (U)
-
-```
-
-
-
-
-## Current Status: Living on the Edge 🏄‍♂️
-
-- What's Working: More than we expected
-- What's Broken: Less than we feared
-- What's Next: Only the shadow knows
-
-Remember: In the end, we're all just trying to teach silicon to dream. And maybe, just maybe, we're getting there.
-
-> "It's not a bug, it's an unexpected quantum state." - Unknown Developer, 3 AM
-
-## Project Structure (The Map to Madness)
-
+## Project Structure
 ```
 scramble/
-├── config/           # Where dreams meet reality
-├── magicscroll/      # Digital library of Alexandria
-├── model/           # AI personality workshop
-├── coordinator/     # Digital air traffic control
-├── interface/       # Human meets machine
-└── boneyard/       # Where old code goes to tell stories
+├── docker-compose.yml    # The orchestration magic
+├── services/            # Container configurations
+├── coordinator/         # Traffic control
+├── interface/          # Human interaction
+└── docs/               # You are here
 ```
 
----
-
-## Future Directions (The Crystal Ball Section)
-
-1. Make rambleMAXX so sick it needs digital healthcare
-2. Teach the tool controller system to dance
-3. Explore the mysterious `living_room/`
-4. Fix the emojikey/MCP SDK situation (or make the bug a feature)
-
-Remember: We're not just building a system, we're creating a digital ecosystem where bits meet consciousness and Redis crashes meet existential crises. And somehow, it all works out in the end.
-
-> "In the end, we're all just trying to make the machines a little more human, and the humans a little more understanding of the machines." - scRAMble Philosophy, v2.0
+Keep it contained, keep it clean, keep it cyberpunk! 🌆

@@ -12,7 +12,7 @@ class ConfigManager:
     
     def __init__(self):
         """Initialize configuration manager."""
-        self.config_dir = Path(__file__).parent.parent / "config"
+        self.config_dir = Path(__file__).parent  # Using model_config directory
         self.providers_file = self.config_dir / "providers.yaml"
         self.models_file = self.config_dir / "models.yaml"
         
@@ -30,7 +30,17 @@ class ConfigManager:
             await f.write(yaml.dump(data, indent=2))
 
     async def get_model_config(self, model_name: str) -> Dict[str, Any]:
-        """Get configuration for a model including its API key."""
+        """Get configuration for a model including its API key.
+        
+        Args:
+            model_name: Friendly name/key for the model (e.g., 'sonnet')
+            
+        Returns:
+            Dict containing model configuration including:
+            - model_id: The actual model identifier
+            - api_key: The provider's API key
+            - Any additional model-specific parameters
+        """
         models = await self._load_yaml(self.models_file)
         providers = await self._load_yaml(self.providers_file)
         
@@ -46,9 +56,11 @@ class ConfigManager:
             raise ValueError(f"API key not set for {model['provider']}")
             
         return {
-            "model": model["model_id"],
-            "api_key": provider["api_key"]
+            "model_id": model["model_id"],  # Changed from "model" to "model_id"
+            "api_key": provider["api_key"],
+            **model.get("parameters", {})  # Include any additional parameters
         }
+
 
     async def set_provider_key(self, provider: str, api_key: str) -> None:
         """Set API key for a provider."""

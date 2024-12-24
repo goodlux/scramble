@@ -1,3 +1,10 @@
+"""OAI model implementation using official SDK."""
+from typing import Dict, Any, AsyncGenerator, List, cast
+from anthropic.types import MessageParam, ModelParam
+import logging
+from .llm_model_base import LLMModelBase
+
+
 class OAILLMModel(LLMModelBase):
     """OpenAI model implementation."""
     

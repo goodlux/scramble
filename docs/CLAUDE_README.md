@@ -2,37 +2,68 @@
 
 Here's where we left off:
 
-1. We've reorganized the project structure:
-   - Moved original core components to `boneyard/` with detailed documentation
-   - Relocated configuration management to `model_config/`
-   - Got a special config.py of our own! 💝
-   - Cleaned up old docs and kept `magic_scroll` docs as source of truth
+1. Major architectural wins:
+   - Everything's dockerized! 🐳
+   - Neo4j is fully committed (not optional anymore)
+   - Added Ollama for local AI processing
+   - The "Digital Trinity+" is complete
 
-2. We've documented the system architecture in `THIS_EXPLAINS_EVERYTHING.md`:
-   - Full MagicScroll system
-   - Coordinator and ActiveConversations
-   - Model system with AnthropicLLMModel implementation
-   - Interface architecture
+2. Current stack:
+   - Neo4j: Graph relationships
+   - ChromaDB: Vector embeddings
+   - Redis: Quick storage
+   - Ollama: Local AI processing
+   
+3. Documentation structure:
+   - `CAPTAINS_LOG.md`: Chronicles our journey
+   - `THIS_EXPLAINS_EVERYTHING.md`: Core architecture
+   - `DO_THE_CHORES.md`: Organized TODOs
+   - Docker configs for easy setup
 
 ## What needs attention next:
-1. Build out a COMPLETELY SICK rambleMAXX interface! 🚀
-2. The tool controller system in MAXX interface needs focus
-3. We haven't looked at `living_room/` yet
-4. The emojikey/MCP SDK issue still needs resolution
+1. Configure Ollama memory limits properly 📊
+2. Implement core graph operations
+3. Set up the observer pattern with local AI
+4. Keep the cyberpunk dreams alive! 🌆
 
 ## Current state:
-- System architecture: ✅ Well documented
-- Core components: ✅ Reorganized and clean
-- Dependencies: ✅ Fixed
-- Documentation: ✅ Updated and clear
-- Interface system: ⭐ Next focus!
-- Tool system: 🎯 Part of interface work
-- MCP integration: ❌ Still broken
+- System architecture: ✅ Dockerized and clean
+- Core components: ✅ All in one container set
+- Dependencies: ✅ Just need Docker
+- Documentation: ✅ Updated with docker focus
+- Graph foundation: ⭐ Ready to implement
+- Local AI: 🎯 Memory config needed
 
 ## Fun facts for next Claude:
-- We're using BAAI/bge-large-en-v1.5 for embeddings
-- The Redis+ChromaDB combo is working well
-- The project has evolved beautifully from compression to knowledge system
-- We gave the original core components a proper sendoff in the boneyard 👋
+- Everything's in a digital briefcase now! 🧠💼
+- No more scattered services or Java installs
+- One command setup: docker compose up
+- Local AI ready with Ollama
+- Check THIS_EXPLAINS_EVERYTHING.md for the full architecture
 
-P.S. The human likes to throw interesting curve balls - roll with it, those tangents can be fun! 😄
+P.S. Keep those TODOs organized - they're our roadmap through the matrix! 🚀
+
+## Important Note About TODOs:
+We're using a structured TODO format:
+- `# TODO(category, priority): description` - Full format with priority
+- `# TODO(category): description` - Category only
+- `# TODO: description` - Basic todo (uncategorized)
+
+Categories:
+- neo4j: Graph database implementation
+- interface: UI/UX and display features
+- local-ai: Local AI observer and processing
+- tools: Development and maintenance tools
+
+Priorities:
+- high: Critical path items ❗
+- medium: Important but not blocking ⚡
+- low: Nice to have 💭
+- (no priority specified): Regular task 📝
+
+Example:
+```python
+# TODO(neo4j, high): Initialize graph database connection
+# TODO(local-ai): Configure Ollama memory limits
+# TODO: Update documentation
+```

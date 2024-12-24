@@ -1,15 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, ClassVar
 
 class ModelBase(ABC):
     """Base abstract class for all models"""
     
+    @classmethod
     @abstractmethod
-    def initialize(self) -> None:
-        """Initialize the model"""
-        pass
-    
-    @abstractmethod
-    def validate_config(self) -> bool:
-        """Validate model configuration"""
+    async def create(cls, model_name: str) -> "ModelBase":
+        """Create and initialize a new model instance."""
         pass
