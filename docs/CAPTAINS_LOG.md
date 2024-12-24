@@ -89,8 +89,21 @@ Starting with Neo4j gives us:
 
 Next log entry should detail our initial Neo4j implementation results. Time to make this graph theory practical!
 
+## 2024.12.24 - Containment Strategy
+
+It's becoming increasingly obvious that our brains are growing so large that we will need to put them in a box ... over there ... in a docker. This seems like a safe place, right?
+
+Not only are we packing redis, chromadb, and now Neo4j ... we're even going to park a llama in there why not? what could go wrong?
+
+
+
+
 ## Key for Future Claude:
 - Check /boneyard for old compression code (might be useful for summaries)
 - Watch for TODO: markers in new code
 - Privacy first, always
 - Keep the cyberpunk dreams alive! 🌆
+
+
+
+
