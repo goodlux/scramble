@@ -32,7 +32,8 @@ dependencies = [
     "llama-index-storage-docstore-redis>=0.1.0",
     "llama-index-storage-index-store-redis>=0.1.0",
     "duckdb",
-    "torch"
+    "torch",
+    "neo4j==5.15.0" 
 ]
 
 [project.scripts]

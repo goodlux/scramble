@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 class AnthropicLLMModel(LLMModelBase):
     """Implementation for Anthropic Claude models using official SDK."""
     
-    def __init__(self, model_name: str):
+    def __init__(self):
         """Initialize the Anthropic model."""
-        super().__init__(model_name)
+        super().__init__()
         self.client: AsyncAnthropic | None = None
         self.max_context_length = 128_000  # Claude 3 context window
 
@@ -21,22 +21,6 @@ class AnthropicLLMModel(LLMModelBase):
         self.client = AsyncAnthropic(
             api_key=self.config["api_key"]
         )
-
-    def validate_config(self) -> bool:
-        """Validate the configuration."""
-        if not super().validate_config():
-            return False
-                
-        # Just check we have the bare minimum needed
-        if "api_key" not in self.config:
-            logger.error("API key missing from config")
-            return False
-                
-        if not self.model_name:
-            logger.error("Model name missing from config")
-            return False
-                
-        return True
 
     async def generate_response(self, prompt: str, **params: Any) -> str:
         """Generate a response using the model."""
@@ -74,9 +58,7 @@ class AnthropicLLMModel(LLMModelBase):
     ) -> str:
         """Generate completion using Anthropic client."""
         if not self.client or not self.model_name:
-            await self.initialize()
-            if not self.client or not self.model_name:
-                raise RuntimeError("Failed to initialize client")
+            raise RuntimeError("Model not properly initialized. Use create() to initialize the model.")
 
         try:
             messages = params.get("messages", [])
@@ -106,9 +88,7 @@ class AnthropicLLMModel(LLMModelBase):
     ) -> AsyncGenerator[str, None]:
         """Stream completion using Anthropic client."""
         if not self.client or not self.model_name:
-            await self.initialize()
-            if not self.client or not self.model_name:
-                raise RuntimeError("Failed to initialize client")
+            raise RuntimeError("Model not properly initialized. Use create() to initialize the model.")
 
         try:
             messages = params.get("messages", [])

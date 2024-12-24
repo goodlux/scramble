@@ -8,22 +8,25 @@ import click
 from typing import Dict, TypedDict
 
 from scramble.interface.ramble_interface import RambleInterface
-from .ui.console import console, logger
+from .ui.console import console, setup_logging, logger
+
+# Setup logging first
+setup_logging(console)
 
 class AppConfig(TypedDict):
     """Main application configuration."""
     ui: Dict[str, str]
-    model: str
+    model_name: str
 
 
 # Default configuration
-
 DEFAULT_CONFIG: AppConfig = {
     'ui': {
         'prompt_style': 'cyberpunk'
     },
-    'model_name': 'sonnet'  # Current model name
+    'model_name': 'sonnet'  # Changed to use simplified name
 }
+
 
 class RambleCLI:
     def __init__(self, config: AppConfig = DEFAULT_CONFIG):
@@ -36,6 +39,7 @@ class RambleCLI:
 
             # Initialize new interface with config
             self.interface = RambleInterface()
+            self.interface.model_name = self.config['model_name']
             
             logger.debug("CLI initialization complete")
 
@@ -46,6 +50,7 @@ class RambleCLI:
     async def start_interactive(self):
         """Start interactive chat session."""
         try:
+            await self.interface.setup()  # Ensure setup runs first
             await self.interface.run()
         except Exception as e:
             logger.error(f"Error in interactive session: {e}")

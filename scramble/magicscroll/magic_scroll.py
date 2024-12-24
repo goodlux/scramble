@@ -16,40 +16,104 @@ from .ms_index import MSIndexBase, LlamaIndexImpl
 from .ms_store import RedisStore
 import redis
 from llama_index.core import Document
+from typing import Optional, Dict, Any
+
+from neo4j.exceptions import ServiceUnavailable
+
+from typing import Optional
+from neo4j import AsyncGraphDatabase, AsyncDriver
+import redis.asyncio as aioredis
+from chromadb import AsyncClient as ChromaAsyncClient
+from .config import config
+import logging
+
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
+
+
+logger = logging.getLogger(__name__)
+
+    # TODO: Neo4j - Initialize graph database connection
+    # TODO: Neo4j - Set up graph schema and constraints
+    # TODO: Neo4j - Implement connection pooling
+
+
+from pathlib import Path
+from typing import Optional
+from neo4j import AsyncGraphDatabase, AsyncDriver
+import redis.asyncio as aioredis
+from redis.exceptions import ConnectionError as RedisConnectionError
+from .config import config
+import logging
 
 logger = logging.getLogger(__name__)
 
 class MagicScroll:
-    """
-    THE scroll that rules them all.
-    
-    A unified, personal store of all conversations and knowledge.
-    - Conversations with AI
-    - Documents and their contents
-    - Images and their descriptions
-    - Code snippets and their context
-    - Tool interactions and their results
-    
-    Everything is searchable, connected, and yours.
-    """
-    
-    def __init__(self, storage_path: Optional[Path] = None):
-        """Initialize the one true scroll."""
-        self.storage_path = storage_path or Path.home() / '.scramble' / 'scroll'
-        logger.info(f"Initializing MagicScroll at {self.storage_path}")
+    def __init__(self):
+        """Initialize basic components."""
+        # Initialize connections as None - will be set up in create()
+        self._neo4j_driver: Optional[AsyncDriver] = None
+        self._redis_client: Optional[aioredis.Redis] = None
+        self._chroma_client: Optional[ChromaAsyncClient] = None
+
+    @classmethod
+    async def create(cls) -> 'MagicScroll':
+        """Factory method to create and initialize MagicScroll asynchronously."""
+        magic_scroll = cls()
         
-        # Initialize the index
-        self.doc_store = RedisStore()
-        self.index = LlamaIndexImpl(self.storage_path)
+        # Initialize services if enabled
+        if config.is_redis_enabled():
+            await magic_scroll._init_redis()
+        else:
+            logger.info("Redis integration is disabled")
+
+        if config.is_neo4j_enabled():
+            await magic_scroll._init_neo4j()
+        else:
+            logger.info("Neo4j integration is disabled")
+            
+        # Initialize ChromaDB client
+        await magic_scroll._init_chroma()
+            
+        return magic_scroll
     
+    async def _init_redis(self):
+        """Initialize Redis connection if enabled"""
+        try:
+            redis_config = config.get_redis_config()
+            if redis_config:
+                self._redis_client = aioredis.Redis(
+                    host=redis_config["host"],
+                    port=redis_config["port"],
+                    db=redis_config["db"],
+                    decode_responses=True
+                )
+                # Test connection
+                await self._redis_client.ping()
+                logger.info("Redis connection initialized")
+        except RedisConnectionError:
+            logger.warning("Redis service not available - falling back to basic mode")
+            self._redis_client = None
+        except Exception as e:
+            logger.error(f"Failed to initialize Redis: {str(e)}")
+            self._redis_client = None
+            
+    @property
+    def has_graph(self) -> bool:
+        """Check if graph capabilities are available"""
+        return self._neo4j_driver is not None
+
     async def write_conversation(self,
         content: str,
         metadata: Optional[List[str]] = None,
         parent_id: Optional[str] = None
     ) -> str:
         """Write a conversation to the scroll."""
+        # TODO: Neo4j - Create conversation node
+        # TODO: Neo4j - Handle parent-child relationships
+        # TODO: Neo4j - Add temporal relationships
+        # TODO: Neo4j - Implement access control properties
         entry = MSConversation(
             content=content,
             metadata={"tags": metadata} if metadata else None,
@@ -165,6 +229,10 @@ class MagicScroll:
     async def remember(self, query: str, entry_types: Optional[List[EntryType]] = None,
                       limit: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
         """Search the scroll's memory."""
+
+        # TODO: Neo4j - Enhance search with graph relationships
+        # TODO: Neo4j - Implement relationship-aware scoring
+        # TODO: Neo4j - Add temporal path finding
         # Search vector index
         results = await self.index.search(query, entry_types, limit, min_score)
         
