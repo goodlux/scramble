@@ -1,10 +1,17 @@
 # 🧹 scRAMble Chores List
 
-Generated on: 2024-12-23 20:54:39
+Generated on: 2024-12-24 02:30:30
 
 > This file is auto-generated. Edit the TODOs in the source files!
 
 ## Categories
+
+### Living-Room
+
+📝 Priority NONE:
+- [ ] Nomena's Configuration (`scramble/config.py:25`)
+- [ ] Add room-specific database if needed (`scramble/config.py:43`)
+- [ ] Add room-specific Redis DB if needed (`scramble/config.py:56`)
 
 ### Uncategorized
 
@@ -30,16 +37,16 @@ Generated on: 2024-12-23 20:54:39
 - [ ] Neo4j - Update relationship metadata (`scramble/coordinator/coordinator.py:76`)
 - [ ] LocalAI - Add hooks for observer (`scramble/coordinator/coordinator.py:77`)
 - [ ] Interface - Prepare for rambleMAXX integration (`scramble/coordinator/coordinator.py:78`)
-- [ ] Neo4j - Initialize graph database connection (`scramble/magicscroll/magic_scroll.py:40`)
-- [ ] Neo4j - Set up graph schema and constraints (`scramble/magicscroll/magic_scroll.py:41`)
-- [ ] Neo4j - Implement connection pooling (`scramble/magicscroll/magic_scroll.py:42`)
-- [ ] Neo4j - Create conversation node (`scramble/magicscroll/magic_scroll.py:56`)
-- [ ] Neo4j - Handle parent-child relationships (`scramble/magicscroll/magic_scroll.py:57`)
-- [ ] Neo4j - Add temporal relationships (`scramble/magicscroll/magic_scroll.py:58`)
-- [ ] Neo4j - Implement access control properties (`scramble/magicscroll/magic_scroll.py:59`)
-- [ ] Neo4j - Enhance search with graph relationships (`scramble/magicscroll/magic_scroll.py:176`)
-- [ ] Neo4j - Implement relationship-aware scoring (`scramble/magicscroll/magic_scroll.py:177`)
-- [ ] Neo4j - Add temporal path finding (`scramble/magicscroll/magic_scroll.py:178`)
+- [ ] Neo4j - Initialize graph database connection (`scramble/magicscroll/magic_scroll.py:37`)
+- [ ] Neo4j - Set up graph schema and constraints (`scramble/magicscroll/magic_scroll.py:38`)
+- [ ] Neo4j - Implement connection pooling (`scramble/magicscroll/magic_scroll.py:39`)
+- [ ] Neo4j - Create conversation node (`scramble/magicscroll/magic_scroll.py:113`)
+- [ ] Neo4j - Handle parent-child relationships (`scramble/magicscroll/magic_scroll.py:114`)
+- [ ] Neo4j - Add temporal relationships (`scramble/magicscroll/magic_scroll.py:115`)
+- [ ] Neo4j - Implement access control properties (`scramble/magicscroll/magic_scroll.py:116`)
+- [ ] Neo4j - Enhance search with graph relationships (`scramble/magicscroll/magic_scroll.py:233`)
+- [ ] Neo4j - Implement relationship-aware scoring (`scramble/magicscroll/magic_scroll.py:234`)
+- [ ] Neo4j - Add temporal path finding (`scramble/magicscroll/magic_scroll.py:235`)
 
 ## Files
 
@@ -53,6 +60,13 @@ File: `ramblemaxx/app.py`
 - [ ] 📝  Line 45: Interface - Add graph visualization area
 - [ ] 📝  Line 46: Interface - Prepare observer panel
 - [ ] 📝  Line 47: Interface - Add relationship display
+
+### config.py
+File: `scramble/config.py`
+
+- [ ] 📝 (living-room) Line 25: Nomena's Configuration
+- [ ] 📝 (living-room) Line 43: Add room-specific database if needed
+- [ ] 📝 (living-room) Line 56: Add room-specific Redis DB if needed
 
 ### coordinator.py
 File: `scramble/coordinator/coordinator.py`
@@ -78,16 +92,16 @@ File: `scramble/interface/observer_concept.py`
 ### magic_scroll.py
 File: `scramble/magicscroll/magic_scroll.py`
 
-- [ ] 📝  Line 40: Neo4j - Initialize graph database connection
-- [ ] 📝  Line 41: Neo4j - Set up graph schema and constraints
-- [ ] 📝  Line 42: Neo4j - Implement connection pooling
-- [ ] 📝  Line 56: Neo4j - Create conversation node
-- [ ] 📝  Line 57: Neo4j - Handle parent-child relationships
-- [ ] 📝  Line 58: Neo4j - Add temporal relationships
-- [ ] 📝  Line 59: Neo4j - Implement access control properties
-- [ ] 📝  Line 176: Neo4j - Enhance search with graph relationships
-- [ ] 📝  Line 177: Neo4j - Implement relationship-aware scoring
-- [ ] 📝  Line 178: Neo4j - Add temporal path finding
+- [ ] 📝  Line 37: Neo4j - Initialize graph database connection
+- [ ] 📝  Line 38: Neo4j - Set up graph schema and constraints
+- [ ] 📝  Line 39: Neo4j - Implement connection pooling
+- [ ] 📝  Line 113: Neo4j - Create conversation node
+- [ ] 📝  Line 114: Neo4j - Handle parent-child relationships
+- [ ] 📝  Line 115: Neo4j - Add temporal relationships
+- [ ] 📝  Line 116: Neo4j - Implement access control properties
+- [ ] 📝  Line 233: Neo4j - Enhance search with graph relationships
+- [ ] 📝  Line 234: Neo4j - Implement relationship-aware scoring
+- [ ] 📝  Line 235: Neo4j - Add temporal path finding
 
 ### do_the_chores.py
 File: `tools/do_the_chores.py`
