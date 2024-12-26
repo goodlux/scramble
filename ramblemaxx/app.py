@@ -18,6 +18,10 @@ class RambleMaxx(App):
     ]
     
     def __init__(self):
+        # TODO: Interface - Prepare for graph visualization
+        # TODO: Interface - Add observer panel hooks
+        # TODO: Interface - Set up animation framework
+        # TODO: LocalAI - Add observer initialization
         super().__init__()
         self.interface = None
     
@@ -38,6 +42,9 @@ class RambleMaxx(App):
     
     def compose(self) -> ComposeResult:
         """Create the interface layout."""
+        # TODO: Interface - Add graph visualization area
+        # TODO: Interface - Prepare observer panel
+        # TODO: Interface - Add relationship display
         yield Header(show_clock=True)
         yield Horizontal(
             # Main chat terminal
@@ -88,4 +95,4 @@ Chat Commands:
             await self.interface.tool_controller.invoke_tool(
                 "ChatTerminalWidget.write",
                 help_text
-            )
+            ) 

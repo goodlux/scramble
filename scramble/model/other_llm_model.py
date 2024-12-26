@@ -1,22 +1,14 @@
-"""Implementation using LiteLLM for model interaction."""
-from typing import Optional, Dict, Any, Union, AsyncGenerator
-import logging
-
+from typing import Dict, Any, AsyncGenerator, Union, Optional
 from .llm_model_base import LLMModelBase
 
-logger = logging.getLogger(__name__)
-
 class OtherLLMModel(LLMModelBase):
-    """Model implementation using LiteLLM."""
+    """Implementation for other LLM providers."""
     
-    def __init__(self, model_name: str):
-        # Renamed from config param to model_name for consistency
-        super().__init__(model_name)
+    def __init__(self):
+        """Basic initialization."""
+        super().__init__()
+        self.temperature: float = 0.7
         
-        # Get parameters with defaults if not specified
-        self.max_context_length = 4096  # Moved default here instead of from config
-        self.temperature = 0.7
-    
     async def generate_response(
         self,
         prompt: str,
@@ -31,15 +23,22 @@ class OtherLLMModel(LLMModelBase):
                 **kwargs
             }
             
-            return await super().generate_response(
-                prompt=prompt,
-                stream=stream,
-                **params
-            )
-            
+            if stream:
+                return self._generate_stream(prompt, **params)
+            else:
+                return await self._generate_completion(prompt, **params)
+                
         except Exception as e:
-            logger.error(f"Error generating response with {self.model_name}: {e}")
-            raise
+            logger.error(f"Error generating response: {str(e)}")
+            if stream:
+                # Return an empty async generator for stream mode
+                async def empty_generator() -> AsyncGenerator[str, None]:
+                    if False:  # This will never yield
+                        yield ""
+                return empty_generator()
+            else:
+                # Return empty string for non-stream mode
+                return ""
             
 
     def get_model_info(self) -> Dict[str, Any]:

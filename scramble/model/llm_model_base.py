@@ -5,7 +5,8 @@ import asyncio
 import time
 import logging
 from .model_base import ModelBase
-from ..core.config_manager import ConfigManager
+from ..model_config.config_manager import ConfigManager 
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
@@ -22,50 +23,56 @@ class Message(TypedDict):
 class LLMModelBase(ModelBase):
     """Base class adding Scramble-specific features to LLM models."""
     
+    # Declare class attributes with types
+    model_name: str
+    model_id: str | None
+    config: Dict[str, Any]
+    rate_limit: float
+    _last_request: float
+    max_context_length: int
+    context_buffer: List[Message]
+    system_message: str | None
+    
     @classmethod
     async def create(cls, model_name: str) -> "LLMModelBase":
         """Create and initialize a new model instance.
         Args:
             model_name: Friendly name/key for the model (e.g., 'sonnet')
         """
-        self = cls(model_name)
-        await self.initialize()
-        return self
-    
-    def __init__(self, model_name: str):
-        """Initialize the model.
-        Args:
-            model_name: Friendly name/key for the model (e.g., 'sonnet')
-        """
-        self.model_name = model_name        # 'sonnet'
-        self.model_id: str | None = None    # 'claude-3-sonnet-20240229'
-        self.config: Dict[str, Any] = {}
+        self = cls()  # Create uninitialized instance
+        
+        # Basic setup
+        self.model_name = model_name
+        self.model_id = None
+        self.config = {}
         self.rate_limit = 2.0
         self._last_request = 0.0
-        
-        # Context management - using standardized message format
         self.max_context_length = 4096
-        self.context_buffer: List[Message] = []
-        self.system_message: str | None = None
-
-    async def initialize(self) -> None:
-        """Initialize the model with configuration."""
-        config_manager = ConfigManager()
-        self.config = await config_manager.get_model_config(self.model_name)
-        self.model_id = self.config["model_id"]
+        self.context_buffer = []
+        self.system_message = None
         
-        # Provider-specific initialization
-        await self._initialize_client()
-        if not self.validate_config():
-            raise ValueError("Invalid configuration")
+        # Load config and initialize client
+        try:
+            config_manager = ConfigManager()
+            self.config = await config_manager.get_model_config(self.model_name)
+            self.model_id = self.config["model_id"]
+            await self._initialize_client()
+        except Exception as e:
+            logger.error(f"Failed to initialize model: {str(e)}")
+            raise
             
-        # Provider-specific initialization
-        await self._initialize_client()
+        return self
 
+    def __init__(self):
+        """Basic initialization only. Use create() instead."""
+        pass  # All initialization happens in create()
+
+    @abstractmethod
     async def _initialize_client(self) -> None:
         """Initialize provider-specific client. Must be implemented by subclasses."""
         raise NotImplementedError
 
+ 
 
     def _add_to_context(
         self,

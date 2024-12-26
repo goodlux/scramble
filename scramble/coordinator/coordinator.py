@@ -17,6 +17,9 @@ class Coordinator:
     
     def __init__(self):
         """Initialize the coordination system."""
+        # TODO: Neo4j - Initialize graph-aware conversation handling
+        # TODO: Neo4j - Set up relationship tracking
+        # TODO: LocalAI - Prepare for observer integration
         self.scroll: Optional[MagicScroll] = None
         self.active_models: Dict[str, LLMModelBase] = {}
         self.conversation: Optional[ActiveConversation] = None
@@ -69,6 +72,10 @@ class Coordinator:
     
     async def process_message(self, message: str) -> Dict[str, Any]:
         """Process a user message through the conversation system."""
+        # TODO: Neo4j - Track conversation flow in graph
+        # TODO: Neo4j - Update relationship metadata
+        # TODO: LocalAI - Add hooks for observer
+        # TODO: Interface - Prepare for rambleMAXX integration
         try:
             if not self.conversation:
                 await self.start_conversation()

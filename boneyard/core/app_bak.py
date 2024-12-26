@@ -13,19 +13,19 @@ from scramble.core.compressor import SemanticCompressor
 from scramble.core.store import  ContextManager
 from scramble.core.api import AnthropicClient
 
-from .ui.console import console, logger, setup_logging
-from .ui.welcome import show_welcome
-from .handlers.commands import CommandHandler
-from .handlers.messages import MessageHandler
-from .commands.inspect import inspect
-from .commands.reindex import reindex
-from .commands.stats import detailed_stats
-from .commands.config import config
+from ....ramble.ui.console import console, logger, setup_logging
+from ....ramble.ui.welcome import show_welcome
+from ....ramble.handlers.commands import CommandHandler
+from ....ramble.handlers.messages import MessageHandler
+from ....ramble.commands.inspect import inspect
+from ....ramble.commands.reindex import reindex
+from ....ramble.commands.stats import detailed_stats
+from ....ramble.commands.config import config
 
-from .ui.console import console, logger, setup_logging, prompt_user  # Add prompt_user here
-from .ui.welcome import show_welcome
-from .handlers.commands import CommandHandler
-from .handlers.messages import MessageHandler
+from ....ramble.ui.console import console, logger, setup_logging, prompt_user  # Add prompt_user here
+from ....ramble.ui.welcome import show_welcome
+from ....ramble.handlers.commands import CommandHandler
+from ....ramble.handlers.messages import MessageHandler
 
 from textual.widgets import Static
 
