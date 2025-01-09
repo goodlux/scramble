@@ -9,18 +9,19 @@ logger = logging.getLogger(__name__)
 class RedisStore:
     """Redis storage for MagicScroll entries"""
     
-    def __init__(self, client: Optional[aioredis.Redis] = None):
+    def __init__(self, namespace='magicscroll'):
         """Initialize with existing client or create new one"""
-        self.redis = client if client else aioredis.Redis(
+        self.namespace = namespace
+        self.redis = aioredis.Redis(
             host="localhost",
             port=6379,
             decode_responses=True
         )
         
     @classmethod
-    async def create(cls, client: Optional[aioredis.Redis] = None) -> 'RedisStore':
+    async def create(cls, namespace='magicscroll') -> 'RedisStore':
         """Factory method for async initialization"""
-        store = cls(client)
+        store = cls(namespace=namespace)
         # Test connection
         await store.redis.ping()
         return store
@@ -28,11 +29,11 @@ class RedisStore:
     async def store_entry(self, entry: MSEntry) -> bool:
         """Store an entry in Redis"""
         try:
-            key = f"entry:{entry.id}"
-            # Store entry data
-            await self.redis.set(key, entry.json())
+            key = f"{self.namespace}:entry:{entry.id}"
+            # Store entry data as dict
+            await self.redis.set(key, json.dumps(entry.to_dict()))
             # Add to time index
-            await self.redis.zadd("entries:timeline", {entry.id: entry.created_at.timestamp()})
+            await self.redis.zadd(f"{self.namespace}:timeline", {entry.id: entry.created_at.timestamp()})
             return True
         except Exception as e:
             logger.error(f"Error storing entry in Redis: {e}")
@@ -41,10 +42,10 @@ class RedisStore:
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
         """Retrieve an entry from Redis"""
         try:
-            data = await self.redis.get(f"entry:{entry_id}")
+            data = await self.redis.get(f"{self.namespace}:entry:{entry_id}")
             if not data:
                 return None
-            return MSEntry.from_json(data)
+            return MSEntry.from_dict(json.loads(data))
         except Exception as e:
             logger.error(f"Error retrieving entry from Redis: {e}")
             return None

@@ -73,8 +73,7 @@ class MagicScroll:
 
             # Initialize ChromaDB with async client
             magic_scroll._chroma_client = AsyncChromaClient(
-                host=magic_scroll.config.CHROMA_HOST,
-                port=magic_scroll.config.CHROMA_PORT
+                base_url="http://localhost:8000"
             )
             
             # Test ChromaDB connection with retries
@@ -99,9 +98,15 @@ class MagicScroll:
             if retry_count >= max_retries:
                 raise RuntimeError("Failed to connect to ChromaDB after multiple attempts")
 
+            if not magic_scroll.collection:
+                raise RuntimeError("ChromaDB collection not initialized")
+
             # Initialize index after core services are ready
-            magic_scroll.index = await LlamaIndexImpl.create()
-            magic_scroll.doc_store = RedisStore(magic_scroll._redis_client)
+            magic_scroll.index = await LlamaIndexImpl.create(
+                chroma_client=magic_scroll._chroma_client,
+                collection=magic_scroll.collection
+            )
+            magic_scroll.doc_store = RedisStore(namespace='magicscroll')
             
             logger.info("Digital Trinity+ initialized successfully")
             return magic_scroll

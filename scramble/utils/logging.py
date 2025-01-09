@@ -8,30 +8,26 @@ from rich.console import Console
 console = Console()
 
 def setup_logging(level: Optional[str] = None) -> None:
-    """Configure logging with proper format including filename and line numbers."""
+    """Configure logging with minimal format."""
     if level is None:
         level = "INFO"
 
-    # Configure Rich handler
+    # Configure Rich handler with minimal formatting
     rich_handler = RichHandler(
         console=console,
-        show_path=True,
-        enable_link_path=True,
+        show_path=True,         # Show filename
+        enable_link_path=True,  # Enable clickable links
         markup=True,
-        rich_tracebacks=True
+        rich_tracebacks=False,  # Disable rich tracebacks
+        show_time=False,        # No timestamp
+        show_level=True         # Keep level for error distinction
     )
 
-    # Configure formatter to work with Rich
-    rich_handler.setFormatter(logging.Formatter(
-        '%(message)s',  # Rich handles the rest
-        datefmt='%Y-%m-%d %H:%M:%S'
-    ))
+    # Just filename, line number, and message
+    rich_handler.setFormatter(logging.Formatter('%(filename)s:%(lineno)d - %(message)s'))
 
-    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
-
-    # Remove any existing handlers and add our Rich handler
     root_logger.handlers = []
     root_logger.addHandler(rich_handler)
 

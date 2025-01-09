@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone  
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+import json
 from scramble.utils.logging import get_logger
 
 # LlamaIndex core imports
@@ -85,29 +86,39 @@ class LlamaIndexImpl(MSIndexBase):
         self.index: Optional[VectorStoreIndex] = None
 
     @classmethod
-    async def create(cls) -> 'LlamaIndexImpl':
+    async def create(cls, chroma_client: AsyncChromaClient, collection: ChromaCollection) -> 'LlamaIndexImpl':
         """Factory method to create and initialize index asynchronously."""
         instance = cls()
         
         try:
-            # Set up storage path
-            instance.storage_path = Path.home() / '.scramble' / 'scroll'
+            # Set up storage path and required directories first
+            instance.storage_path = Path.home() / '.scramble' / 'magicscroll'
             instance.storage_path.mkdir(parents=True, exist_ok=True)
             
-            # Initialize ChromaDB with async client
-            instance.chroma_client = AsyncChromaClient(
-                host=instance.config.CHROMA_HOST,
-                port=instance.config.CHROMA_PORT
-            )
+            # Create required subdirectories
+            docstore_path = instance.storage_path / 'docstore'
+            docstore_path.mkdir(exist_ok=True)
+            vector_store_path = instance.storage_path / 'vector_store'
+            vector_store_path.mkdir(exist_ok=True)
             
-            # Test connection and get/create collection
-            if await instance.chroma_client.heartbeat():
-                instance.collection = await instance.chroma_client.get_or_create_collection("scroll-store")
-                instance.vector_store = ChromaVectorStore(
-                    chroma_collection=instance.collection
-                )
-            else:
-                raise RuntimeError("Failed to connect to ChromaDB")
+            # Create minimal index_store.json if it doesn't exist
+            index_store_path = instance.storage_path / 'index_store.json'
+            if not index_store_path.exists():
+                logger.info("Creating initial index store file")
+                initial_store = {
+                    "index_store": {},
+                    "vector_store": {},
+                    "document_store": {}
+                }
+                with open(index_store_path, 'w') as f:
+                    json.dump(initial_store, f)
+            
+            # Initialize ChromaDB with async client
+            instance.chroma_client = chroma_client
+            instance.collection = collection
+            instance.vector_store = ChromaVectorStore(
+                chroma_collection=collection
+            )
             
             # Initialize Redis document store
             instance.doc_store = RedisDocumentStore.from_host_and_port(
@@ -135,31 +146,41 @@ class LlamaIndexImpl(MSIndexBase):
                 persist_dir=str(instance.storage_path)
             )
             
-            # Try to load existing index or create new one
-            # In the create method
-            try:
-                loaded_index = load_index_from_storage(
-                    storage_context=instance.storage_context,
-                    persist_dir=str(instance.storage_path)
-                )
-                if isinstance(loaded_index, VectorStoreIndex):
-                    instance.index = loaded_index
-                    logger.info("Successfully loaded existing index")
-                else:
-                    logger.warning("Loaded index is not VectorStoreIndex, creating new one")
-                    instance.index = VectorStoreIndex.from_documents(
-                        [],
-                        storage_context=instance.storage_context,
-                        show_progress=True
-                    )
-            except Exception as load_err:
-                logger.info(f"No existing index found, creating new one: {load_err}")
-                instance.index = VectorStoreIndex.from_documents(
+            # First time running - no existing index
+            if not (instance.storage_path / 'index_store.json').exists():
+                logger.info("No existing index found, creating new one")
+                instance.index = VectorStoreIndex(
                     [],
                     storage_context=instance.storage_context,
                     show_progress=True
                 )
-                
+            else:
+                # Try to load existing index
+                try:
+                    loaded_index = load_index_from_storage(
+                        storage_context=instance.storage_context,
+                        persist_dir=str(instance.storage_path)
+                    )
+                    if not isinstance(loaded_index, VectorStoreIndex):
+                        logger.warning("Loaded index is not VectorStoreIndex, creating new one")
+                        instance.index = VectorStoreIndex(
+                            [],
+                            storage_context=instance.storage_context,
+                            show_progress=True
+                        )
+                    else:
+                        instance.index = loaded_index
+                        logger.info("Successfully loaded existing index")
+                except Exception as load_err:
+                    logger.warning(f"Error loading existing index, creating new one: {load_err}")
+                    instance.index = VectorStoreIndex(
+                        [],
+                        storage_context=instance.storage_context,
+                        show_progress=True
+                    )
+            
+            logger.debug(f"Collection exists: {instance.collection is not None}")
+            logger.debug(f"Index exists: {instance.index is not None}")
             return instance
             
         except Exception as e:
