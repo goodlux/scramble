@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
-import logging
 
 # Local imports
 from .ms_entry import (
@@ -23,11 +22,13 @@ from neo4j.exceptions import ServiceUnavailable
 import redis.asyncio as aioredis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from llama_index.core import Document
+import asyncio
+from scramble.utils.logging import get_logger
 
 # Config
 from scramble.config import Config
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MagicScroll:
     def __init__(self):
@@ -76,12 +77,27 @@ class MagicScroll:
                 port=magic_scroll.config.CHROMA_PORT
             )
             
-            # Test ChromaDB connection
-            if await magic_scroll._chroma_client.heartbeat():
-                magic_scroll.collection = await magic_scroll._chroma_client.get_or_create_collection("scroll-store")
-                logger.info("ChromaDB connection initialized")
-            else:
-                raise RuntimeError("Failed to connect to ChromaDB")
+            # Test ChromaDB connection with retries
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    if await magic_scroll._chroma_client.heartbeat():
+                        magic_scroll.collection = await magic_scroll._chroma_client.get_or_create_collection("magicscroll")
+                        logger.info("ChromaDB connection initialized")
+                        break
+                    retry_count += 1
+                    logger.warning(f"ChromaDB heartbeat failed, attempt {retry_count}/{max_retries}")
+                    await asyncio.sleep(1)  # Wait a second before retry
+                except Exception as e:
+                    retry_count += 1
+                    logger.warning(f"ChromaDB connection attempt {retry_count}/{max_retries} failed: {e}")
+                    if retry_count >= max_retries:
+                        raise RuntimeError("Failed to connect to ChromaDB after multiple attempts")
+                    await asyncio.sleep(1)
+
+            if retry_count >= max_retries:
+                raise RuntimeError("Failed to connect to ChromaDB after multiple attempts")
 
             # Initialize index after core services are ready
             magic_scroll.index = await LlamaIndexImpl.create()
@@ -99,165 +115,59 @@ class MagicScroll:
         metadata: Optional[List[str]] = None,
         parent_id: Optional[str] = None
     ) -> str:
-        """Write a conversation to the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-            
-        entry = MSConversation(
-            content=content,
-            metadata={"tags": metadata} if metadata else None,
-            parent_id=parent_id
-        )
+        """Write a conversation entry to the storage system.
         
+        Args:
+            content: The conversation content
+            metadata: Optional list of metadata tags
+            parent_id: Optional ID of parent conversation entry
+            
+        Returns:
+            str: The ID of the created entry
+        """
         try:
-            # Store in both Redis and vector index
-            doc = Document(
-                text=entry.content,
-                doc_id=entry.id,
+            if not self.index:
+                raise RuntimeError("Index not initialized")
+                
+            # Convert metadata list to dictionary format expected by MSConversation
+            metadata_dict: Dict[str, Any] = {
+                "tags": metadata
+            } if metadata else {}
+            
+            # Create conversation entry
+            conversation = MSConversation(
+                content=content,
+                metadata=metadata_dict,  # Now passing a dictionary
+                parent_id=parent_id
             )
             
-            # Store via index
-            if await self.index.add_entry(entry):
-                logger.info(f"Added conversation entry {entry.id}")
-                return entry.id
-            else:
-                raise RuntimeError("Failed to write conversation to scroll")
+            # Add to index
+            success = await self.index.add_entry(conversation)
+            if not success:
+                raise RuntimeError("Failed to add entry to index")
                 
+            # Store in Neo4j if available and there's a parent
+            if self._neo4j_driver and parent_id:
+                try:
+                    async with self._neo4j_driver.session() as session:
+                        await session.run(
+                            """
+                            MATCH (parent:Entry {id: $parent_id})
+                            CREATE (child:Entry {
+                                id: $entry_id,
+                                type: 'conversation',
+                                created_at: datetime()
+                            })
+                            CREATE (child)-[:CONTINUES]->(parent)
+                            """,
+                            parent_id=parent_id,
+                            entry_id=conversation.id
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to store Neo4j relationship: {e}")
+            
+            return conversation.id
+            
         except Exception as e:
-            logger.error(f"Error writing conversation: {str(e)}")
-            raise RuntimeError(f"Failed to write conversation to scroll: {str(e)}")
-
-    async def write_document(self,
-        title: str,
-        content: str,
-        uri: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Write a document to the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-            
-        entry = MSDocument(
-            title=title,
-            content=content,
-            uri=uri,
-            metadata=metadata
-        )
-        
-        if await self.index.add_entry(entry):
-            logger.info(f"Added document entry {entry.id}: {title}")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write document to scroll")
-    
-    async def write_image(self,
-        caption: str,
-        uri: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Write an image to the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-            
-        entry = MSImage(
-            caption=caption,
-            uri=uri,
-            metadata=metadata
-        )
-        
-        if await self.index.add_entry(entry):
-            logger.info(f"Added image entry {entry.id}")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write image to scroll")
-    
-    async def write_code(self,
-        code: str,
-        language: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Write code to the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-            
-        entry = MSCode(
-            code=code,
-            language=language,
-            metadata=metadata
-        )
-        
-        if await self.index.add_entry(entry):
-            logger.info(f"Added code entry {entry.id} [{language}]")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write code to scroll")
-    
-    async def remember(self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5,
-        min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Search the scroll's memory."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-
-        # Search vector index
-        results = await self.index.search(query, entry_types, limit, min_score)
-        
-        # Fetch full entries from Redis if doc_store is available
-        if self.doc_store:
-            enhanced_results = []
-            for result in results:
-                entry_id = result["entry"].id
-                full_entry = await self.doc_store.get_entry(entry_id)
-                if full_entry:
-                    result["entry"] = full_entry
-                    enhanced_results.append(result)
-            return enhanced_results
-        
-        return results
-    
-    async def recall(self, entry_id: str) -> Optional[MSEntry]:
-        """Recall a specific entry from the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-        return await self.index.get_entry(entry_id)
-    
-    async def forget(self, entry_id: str) -> bool:
-        """Remove an entry from the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-        return await self.index.delete_entry(entry_id)
-    
-    async def recall_recent(self,
-        hours: Optional[int] = None,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 10
-    ) -> List[MSEntry]:
-        """Recall recent entries from the scroll."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-        return await self.index.get_recent(hours, entry_types, limit)
-    
-    async def recall_thread(self, entry_id: str) -> List[MSEntry]:
-        """Recall a complete thread of entries."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-        return await self.index.get_chain(entry_id)
-    
-    async def summarize(self) -> Dict[str, Any]:
-        """Get a summary of the scroll's contents."""
-        if not self.index:
-            raise RuntimeError("Index not initialized")
-            
-        recent = await self.recall_recent(hours=24)
-        types = {}
-        for entry in recent:
-            types[entry.entry_type.value] = types.get(entry.entry_type.value, 0) + 1
-            
-        return {
-            "recent_24h": len(recent),
-            "entry_types": types,
-            "latest_entry": recent[0].created_at if recent else None
-        }
+            logger.error(f"Failed to write conversation: {e}")
+            raise

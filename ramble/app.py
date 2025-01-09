@@ -6,12 +6,13 @@ import asyncio
 import sys
 import click
 from typing import Dict, TypedDict
-
+from rich.console import Console
 from scramble.interface.ramble_interface import RambleInterface
-from .ui.console import console, setup_logging, logger
+from scramble.utils.logging import setup_logging, get_logger
 
-# Setup logging first
-setup_logging(console)
+# Setup console and logger
+console = Console()
+logger = get_logger(__name__)
 
 class AppConfig(TypedDict):
     """Main application configuration."""
@@ -39,7 +40,7 @@ class RambleCLI:
 
             # Initialize new interface with config
             self.interface = RambleInterface()
-            self.interface.model_name = self.config['model_name']
+            self.interface.set_model_name(self.config['model_name'])  # Using the setter
             
             logger.debug("CLI initialization complete")
 
@@ -60,6 +61,7 @@ class RambleCLI:
 def cli():
     """Ramble - Context-aware CLI chat interface"""
     try:
+        setup_logging()  # Setup logging before any operations
         app = RambleCLI()
         asyncio.run(app.start_interactive())
     except Exception as e:
