@@ -72,7 +72,18 @@ class LLMModelBase(ModelBase):
         """Initialize provider-specific client. Must be implemented by subclasses."""
         raise NotImplementedError
 
- 
+    @abstractmethod
+    async def generate_response(self, prompt: str, **kwargs: Any) -> Union[str, AsyncGenerator[str, None]]:
+        """Generate a response from the model.
+        
+        Args:
+            prompt: The input text to generate a response for
+            **kwargs: Additional model-specific parameters
+            
+        Returns:
+            Either a string response or an async generator for streaming responses
+        """
+        raise NotImplementedError
 
     def _add_to_context(
         self,
