@@ -187,6 +187,7 @@ class LlamaIndexImpl(MSIndexBase):
             logger.error(f"Error initializing LlamaIndex: {e}")
             raise RuntimeError(f"Failed to initialize LlamaIndex: {str(e)}")
 
+
     async def add_entry(self, entry: MSEntry) -> bool:
         """Add an entry to the index."""
         try:
@@ -202,42 +203,57 @@ class LlamaIndexImpl(MSIndexBase):
                 logger.error("Storage context not initialized")
                 return False
                 
-            # Check if we already have a version of this content
-            existing_docs = self.index.storage_context.docstore.docs
-            for doc_id, doc in existing_docs.items():
-                if doc.get_content() == entry.content:
-                    logger.debug(f"Content already exists in doc {doc_id}, skipping")
-                    return True
-                    
-            # Create LlamaIndex document with proper metadata
-            metadata_dict = MSEntry.sanitize_metadata_for_chroma(entry.to_dict())
+            # Log entry details
+            logger.debug(f"Adding entry - ID: {entry.id}")
+            logger.debug(f"Entry type: {entry.entry_type}")
+            logger.debug(f"Entry content preview: {entry.content[:100]}...")
+            logger.debug(f"Raw metadata: {entry.metadata}")
+                        
+            # First convert entry to dict and then sanitize for ChromaDB
+            entry_dict = entry.to_dict()
+            logger.debug(f"Entry dict: {entry_dict}")
+            
+            metadata_dict = MSEntry.sanitize_metadata_for_chroma(entry_dict)
+            logger.debug(f"Sanitized metadata: {metadata_dict}")
+            
+            # Create LlamaIndex document
             doc = Document(
                 text=entry.content,
                 doc_id=entry.id,
-                extra_info=metadata_dict  # Changed to extra_info
+                extra_info=metadata_dict
             )
-            # Get embedding
-            embedding = Settings.embed_model.get_text_embedding(entry.content)
             
-            # Add to collection using proper metadata key
+            # Get embedding
+            logger.debug("Getting text embedding...")
+            embedding = Settings.embed_model.get_text_embedding(entry.content)
+            logger.debug(f"Embedding shape: {len(embedding)}")
+            
+            # Debug log the data being sent to ChromaDB
+            logger.debug("Preparing ChromaDB payload...")
+            
+            # Add to collection
+            logger.debug("Sending to ChromaDB...")
             await self.collection.add(
                 embeddings=[embedding],
-                metadata_list=[metadata_dict],  
+                metadata_list=[metadata_dict],
                 documents=[entry.content],
                 ids=[entry.id]
             )
+            
             # Add to document store
             if self.index.storage_context:
+                logger.debug("Adding to document store...")
                 self.index.storage_context.docstore.add_documents([doc])
                 self.index.storage_context.persist(persist_dir=str(self.storage_path))
             
             logger.debug(f"Successfully added entry {entry.id} to index")
             return True
-            
+                
         except Exception as e:
             logger.error(f"Error adding entry to index: {e}")
-            return False
+            raise
             
+
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
         """Get a specific entry."""
         try:
@@ -251,6 +267,7 @@ class LlamaIndexImpl(MSIndexBase):
             logger.error(f"Error retrieving entry {entry_id}: {e}")
         return None
     
+
     async def delete_entry(self, entry_id: str) -> bool:
         """Delete an entry."""
         try:
@@ -265,6 +282,7 @@ class LlamaIndexImpl(MSIndexBase):
             logger.error(f"Error deleting entry {entry_id}: {e}")
             return False
     
+
     async def search(self,
         query: str,
         entry_types: Optional[List[EntryType]] = None,

@@ -27,29 +27,49 @@ class MSEntry:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert entry to dictionary format."""
-        return {
+        base_dict = {
             "id": self.id,
             "content": self.content,
             "type": self.entry_type.value,
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
-            "parent_id": self.parent_id
         }
+        
+        # Only include parent_id if it exists
+        if self.parent_id is not None:
+            base_dict["parent_id"] = self.parent_id
+            
+        return base_dict
     
     @staticmethod
-    def sanitize_metadata_for_chroma(metadata: Dict[str, Any]) -> Dict[str, Union[str, int, float, None]]:
+    def sanitize_metadata_for_chroma(metadata: Dict[str, Any]) -> Dict[str, Union[str, int, float, bool]]:
         """Convert metadata values to ChromaDB compatible types."""
         if metadata is None:
             return {}
             
         sanitized = {}
         for key, value in metadata.items():
-            if isinstance(value, (str, int, float)) or value is None:
+            # Skip None values
+            if value is None:
+                continue
+                
+            # Convert datetime to ISO string
+            if isinstance(value, datetime):
+                sanitized[key] = value.isoformat()
+            # Convert basic types
+            elif isinstance(value, (str, int, float, bool)):
                 sanitized[key] = value
-            else:
-                # Convert other types to string representation
+            # Convert dict to string (for nested metadata)
+            elif isinstance(value, dict):
                 sanitized[key] = str(value)
+            # Convert list to string
+            elif isinstance(value, list):
+                sanitized[key] = str(value)
+            # Convert any other type to string
+            else:
+                sanitized[key] = str(value)
+                
         return sanitized
 
     @classmethod
@@ -62,7 +82,7 @@ class MSEntry:
             metadata=data["metadata"],
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
-            parent_id=data.get("parent_id")
+            parent_id=data.get("parent_id")  # Use get() to handle missing parent_id
         )
 
 class MSConversation(MSEntry):

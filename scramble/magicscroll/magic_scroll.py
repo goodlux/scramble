@@ -72,7 +72,7 @@ class MagicScroll:
             logger.info("Neo4j connection initialized")
 
             # Initialize ChromaDB with async client
-            magic_scroll._chroma_client = AsyncChromaClient(
+            magic_scroll._chroma_client = await AsyncChromaClient.create(
                 base_url="http://localhost:8000"
             )
             
@@ -150,6 +150,14 @@ class MagicScroll:
             success = await self.index.add_entry(conversation)
             if not success:
                 raise RuntimeError("Failed to add entry to index")
+            
+            # Store in Redis
+            if self.doc_store:
+                success = await self.doc_store.store_entry(conversation)
+                logger.info("Conversation store in Redis, wow that was easy")
+            if not success:
+                logger.warning("Failed to store conversation in Redis")
+
                 
             # Store in Neo4j if available and there's a parent
             if self._neo4j_driver and parent_id:

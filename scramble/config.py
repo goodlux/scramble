@@ -2,6 +2,10 @@ from typing import Optional, Dict, Any
 import os
 
 class Config:
+
+    # Debug settings
+    DEBUG_SESSION: bool = bool(os.getenv("DEBUG_SESSION", ""))  # Empty string evaluates to False
+
     # Deployment Mode
     DEPLOYMENT_MODE: str = os.getenv("DEPLOYMENT_MODE", "scramble")  # or "living-room"
     
