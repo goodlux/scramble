@@ -1,99 +1,143 @@
-"""Anthropic Claude model implementation using official SDK."""
-from typing import Dict, Any, AsyncGenerator, List, cast
+"""Anthropic Claude model implementation with temporal context handling."""
+from typing import Dict, Any, AsyncGenerator, List, cast, Optional, Union
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ModelParam
 import logging
-from .llm_model_base import LLMModelBase
+from datetime import datetime
+from .llm_model_base import LLMModelBase, Message, Role
 
 logger = logging.getLogger(__name__)
 
 class AnthropicLLMModel(LLMModelBase):
     """Implementation for Anthropic Claude models using official SDK."""
     
+    # Additional class attributes specific to Anthropic
+    client: Optional[AsyncAnthropic]
+
     def __init__(self):
         """Initialize the Anthropic model."""
         super().__init__()
-        self.client: AsyncAnthropic | None = None
+        self.client = None
         self.max_context_length = 128_000  # Claude 3 context window
 
     async def _initialize_client(self) -> None:
         """Initialize the Anthropic client."""
+        if "api_key" not in self.config:
+            raise ValueError("API key not found in config")
+            
         self.client = AsyncAnthropic(
             api_key=self.config["api_key"]
         )
 
-    async def generate_response(self, prompt: str, **params: Any) -> str:
-        """Generate a response using the model."""
+    async def generate_response(self, prompt: str, **params: Any) -> Union[str, AsyncGenerator[str, None]]:
+        """Generate a response using the model with temporal context handling."""
         if not self.client or not self.model_id:
             raise RuntimeError("Model not initialized")
 
         try:
+            # Parse and inject temporal context
+            enhanced_prompt = await self._inject_temporal_context(prompt)
+            
+            # Format the messages with context buffer
+            messages = self._format_messages_with_context(enhanced_prompt)
+            
             response = await self.client.messages.create(
-                model=cast(ModelParam, self.model_id),  # Use model_id here
-                messages=[{"role": "user", "content": prompt}],
+                model=cast(ModelParam, self.model_id),
+                messages=messages,
                 max_tokens=params.get("max_tokens", 4096),
                 temperature=params.get("temperature", 0.7)
             )
             
+            # Extract response content
             if response.content and len(response.content) > 0:
                 first_block = response.content[0]
-                return getattr(first_block, 'text', '')
+                response_text = getattr(first_block, 'text', '')
+                
+                # Add response to context buffer with temporal metadata
+                self._add_to_context(
+                    role="assistant",
+                    content=response_text,
+                    metadata={
+                        "model": self.model_name,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                )
+                
+                return response_text
             return ""
             
         except Exception as e:
             logger.error(f"Anthropic API error: {str(e)}")
             raise
 
-    def _create_anthropic_message(self, role: str, content: str) -> MessageParam:
+    def _format_messages_with_context(self, prompt: str) -> List[MessageParam]:
+        """Format messages for the Anthropic API with context."""
+        formatted_messages: List[MessageParam] = []
+        
+        # Add system message if present
+        if self.system_message:
+            formatted_messages.append(self._create_anthropic_message(
+                "system",
+                self.system_message
+            ))
+        
+        # Add context buffer messages
+        for msg in self.context_buffer:
+            # Format temporal references if present
+            content = msg["content"]
+            if "temporal_references" in msg["metadata"]:
+                refs = msg["metadata"]["temporal_references"]
+                if refs:
+                    content = self._format_temporal_context(content, refs)
+            
+            formatted_messages.append(self._create_anthropic_message(
+                msg["role"],
+                content
+            ))
+        
+        # Add current prompt
+        formatted_messages.append(self._create_anthropic_message(
+            "user",
+            prompt
+        ))
+        
+        return formatted_messages
+
+    def _format_temporal_context(self, content: str, temporal_refs: List[Dict[str, Any]]) -> str:
+        """Format content with temporal reference annotations."""
+        formatted_content = content
+        
+        # Add temporal context notes if needed
+        if temporal_refs:
+            temporal_context = "\nTemporal Context:\n"
+            for ref in temporal_refs:
+                temporal_context += f"- {ref['reference']}: {ref['timestamp']}\n"
+            formatted_content = temporal_context + "\n" + formatted_content
+            
+        return formatted_content
+
+    def _create_anthropic_message(self, role: Role, content: str) -> MessageParam:
         """Create a message in Anthropic's format."""
         return cast(MessageParam, {
             "role": role,
             "content": content
         })
 
-    async def _generate_completion(
-        self,
-        prompt: str,
-        **params: Any
-    ) -> str:
-        """Generate completion using Anthropic client."""
-        if not self.client or not self.model_name:
-            raise RuntimeError("Model not properly initialized. Use create() to initialize the model.")
-
-        try:
-            messages = params.get("messages", [])
-            if not messages:
-                messages = [self._create_anthropic_message("user", prompt)]
-
-            response = await self.client.messages.create(
-                model=cast(ModelParam, self.model_name),
-                messages=messages,
-                max_tokens=params.get("max_tokens", 4096),
-                temperature=params.get("temperature", 0.7)
-            )
-            
-            if response.content and len(response.content) > 0:
-                first_block = response.content[0]
-                return getattr(first_block, 'text', '')
-            return ""
-            
-        except Exception as e:
-            logger.error(f"Anthropic API error: {str(e)}")
-            raise
-
     async def _generate_stream(
         self,
         prompt: str,
         **params: Any
     ) -> AsyncGenerator[str, None]:
-        """Stream completion using Anthropic client."""
+        """Stream completion using Anthropic client with temporal context."""
         if not self.client or not self.model_name:
-            raise RuntimeError("Model not properly initialized. Use create() to initialize the model.")
+            raise RuntimeError("Model not properly initialized")
 
         try:
-            messages = params.get("messages", [])
-            if not messages:
-                messages = [self._create_anthropic_message("user", prompt)]
+            # Inject temporal context
+            enhanced_prompt = await self._inject_temporal_context(prompt)
+            
+            # Format messages with context
+            messages = self._format_messages_with_context(enhanced_prompt)
 
             async with self.client.messages.stream(
                 model=cast(ModelParam, self.model_name),
@@ -101,15 +145,29 @@ class AnthropicLLMModel(LLMModelBase):
                 max_tokens=params.get("max_tokens", 4096),
                 temperature=params.get("temperature", 0.7)
             ) as stream:
+                accumulated_response = ""
+                
                 async for chunk in stream:
                     if hasattr(chunk, 'type') and chunk.type == 'content_block_delta':
                         if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text'):
                             text = getattr(chunk.delta, 'text', '')
                             if text:
+                                accumulated_response += text
                                 yield str(text)
+                
+                # After streaming completes, add to context buffer
+                if accumulated_response:
+                    self._add_to_context(
+                        role="assistant",
+                        content=accumulated_response,
+                        metadata={
+                            "model": self.model_name,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    )
                         
         except Exception as e:
-            logger.error(f"Anthropic API error: {str(e)}")
+            logger.error(f"Anthropic API error: {e}")
             raise
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -127,7 +185,8 @@ class AnthropicLLMModel(LLMModelBase):
                 "analysis",
                 "creative",
                 "math",
-                "reasoning"
+                "reasoning",
+                "temporal_context"  # Added new capability
             ],
             "max_tokens": 4096 if (
                 "opus" in model_name or 
@@ -138,5 +197,6 @@ class AnthropicLLMModel(LLMModelBase):
             "supports_vision": (
                 "opus" in model_name or 
                 "sonnet" in model_name
-            )
+            ),
+            "supports_temporal_context": True  # Added new flag
         }

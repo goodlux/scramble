@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Optional
 from scramble.utils.logging import get_logger
 from .active_conversation import ActiveConversation
-from ..magicscroll.magic_scroll import MagicScroll
+from scramble.magicscroll.magic_scroll import MagicScroll 
 from ..model.llm_model_base import LLMModelBase
 from scramble.model.anthropic_llm_model import AnthropicLLMModel
 

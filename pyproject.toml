@@ -37,7 +37,8 @@ dependencies = [
     "neo4j==5.15.0",
     "httpx>=0.26.0",
     "fastapi>=0.109.0",
-    "pydantic>=2.5.3"
+    "pydantic>=2.5.3",
+    "types-redis"
 ]
 
 [project.scripts]
