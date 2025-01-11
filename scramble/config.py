@@ -1,7 +1,17 @@
+"""Configuration management for the Scramble system."""
 from typing import Optional, Dict, Any
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from project root
+project_root = Path(__file__).parent.parent
+load_dotenv(project_root / ".env")
 
 class Config:
+    # Debug settings
+    DEBUG_SESSION: bool = bool(os.getenv("DEBUG_SESSION", ""))  # Empty string evaluates to False
+
     # Deployment Mode
     DEPLOYMENT_MODE: str = os.getenv("DEPLOYMENT_MODE", "scramble")  # or "living-room"
     
@@ -22,10 +32,8 @@ class Config:
     # ChromaDB settings
     CHROMA_PORT: int = 8000
     
-    # TODO(living-room): Nomena's Configuration
-    # CAT_MOOD: str = os.getenv("CAT_MOOD", "SLEEPING")
-    # ROOM_TYPE: str = os.getenv("ROOM_TYPE", "cozy")
-    # AUTH_MODE: str = os.getenv("AUTH_MODE", "none")
+    # Mock LLM settings
+    DISABLE_MOCK_LLM: bool = bool(os.getenv("DISABLE_MOCK_LLM", "true"))
     
     @classmethod
     def is_living_room(cls) -> bool:
@@ -40,9 +48,6 @@ class Config:
             "user": cls.NEO4J_USER,
             "password": cls.NEO4J_PASSWORD
         }
-        # TODO(living-room): Add room-specific database if needed
-        # if cls.is_living_room():
-        #     config["database"] = "living_room"
         return config
 
     @classmethod
@@ -53,9 +58,6 @@ class Config:
             "port": cls.REDIS_PORT,
             "db": cls.REDIS_DB
         }
-        # TODO(living-room): Add room-specific Redis DB if needed
-        # if cls.is_living_room():
-        #     config["db"] = 1
         return config
 
 # Global config instance

@@ -1,41 +1,50 @@
-"""Ramble-specific interface implementation."""
-from typing import Literal
-from datetime import datetime
+from typing import Literal, Optional
 from rich.console import Console
-from ..coordinator.coordinator import Coordinator   
-
+from scramble.coordinator import Coordinator
 from .interface_base import InterfaceBase
-
-console = Console()
-PromptStyle = Literal["minimal", "cyberpunk", "terminal", "scroll"]
 
 class RambleInterface(InterfaceBase):
     def __init__(self):
         super().__init__()
         self.console = Console()
-        self.model_name = None
+        self.model_name: Optional[str] = None
         self._setup_complete = False
+        self.coordinator: Optional[Coordinator] = None
+        self.current_speaker: Optional[str] = None
+
+    def set_model_name(self, name: str) -> None:
+        """Set the model name to use.
+
+        Args:
+            name: The name of the model to use
+        """
+        if not isinstance(name, str):
+            raise TypeError("Model name must be a string")
+        self.model_name = name
 
     async def setup(self) -> None:
         """Setup the interface."""
         if self._setup_complete:
             return
-            
-        # Create coordinator before trying to use it
-        self.coordinator = Coordinator()
-        await self.coordinator.initialize()
-        
+
+        self.coordinator = await Coordinator.create()
         if not self.model_name:
             raise ValueError("Model name not set")
-            
+
         await self.coordinator.add_model(self.model_name)
         await self.coordinator.start_conversation()
         self._setup_complete = True
 
+        # Send initial greeting through the coordinator
+        greeting_result = await self.coordinator.process_message("system: introduce yourself")
+        await self.display_model_output(greeting_result['response'], greeting_result['model'])
+
     async def run(self) -> None:
         """Run the interactive chat loop."""
-        await self.display_status("Welcome to Ramble! Type 'exit' to quit.")
-        
+        # Ensure setup
+        if not self._setup_complete:
+            await self.setup()
+            
         while True:
             try:
                 # Get user input
@@ -48,36 +57,49 @@ class RambleInterface(InterfaceBase):
                 if not user_input.strip():
                     continue
                 
+                if not self.coordinator:
+                    raise RuntimeError("Coordinator not initialized")
+                    
                 # Process through coordinator
                 result = await self.coordinator.process_message(user_input)
                 
-                # Display the response
-                await self.display_output(result['response'])
+                # Display the response with speaker indicator
+                await self.display_model_output(result['response'], result['model'])
                 
             except Exception as e:
                 await self.display_error(f"Error: {str(e)}")
 
-                
     def format_prompt(self) -> str:
         """Format prompt based on current style."""
-        return "ramble> "  
-    
+        return "[bold cyan]you[/bold cyan]> "
+
+    def format_model_prompt(self, model_name: str) -> str:
+        """Format prompt for model responses."""
+        color = "green" if model_name == "granite" else "blue"  # Different colors for different models
+        return f"[bold {color}]{model_name}[/bold {color}]> "
+
+    async def display_model_output(self, content: str, model_name: str) -> None:
+        """Display model output with speaker indicator."""
+        prompt = self.format_model_prompt(model_name)
+        self.console.print(f"{prompt}{content}")
+
     async def display_output(self, content: str) -> None:
         """Display output to the user."""
         self.console.print(content)
-    
+
     async def display_error(self, message: str) -> None:
         """Display error message."""
         self.console.print(f"[red]Error: {message}[/red]")
-    
+
     async def display_status(self, message: str) -> None:
         """Display status message."""
         self.console.print(f"[dim]{message}[/dim]")
-    
+
     async def get_input(self) -> str:
         """Get input from user."""
-        return input(self.format_prompt())
-    
+        self.console.print(self.format_prompt(), end="")
+        return input()
+
     async def clear(self) -> None:
         """Clear the display."""
         import os

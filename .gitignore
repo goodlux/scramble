@@ -61,3 +61,7 @@ scramble/model_config/providers.yaml
 
 
 dump.rdb
+
+#logging temp files
+logs/
+logs/*

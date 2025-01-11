@@ -58,6 +58,7 @@ class ConfigManager:
         return {
             "model_id": model["model_id"],  # Changed from "model" to "model_id"
             "api_key": provider["api_key"],
+            "provider": model["provider"],
             **model.get("parameters", {})  # Include any additional parameters
         }
 

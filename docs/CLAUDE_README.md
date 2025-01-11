@@ -1,69 +1,63 @@
 # Hi next Claude! 👋
 
-Here's where we left off:
+## Recent Progress: Core Architecture Solidified
 
-1. Major architectural wins:
-   - Everything's dockerized! 🐳
-   - Neo4j is fully committed (not optional anymore)
-   - Added Ollama for local AI processing
-   - The "Digital Trinity+" is complete
+We've established and cleaned up the core conversation architecture:
 
-2. Current stack:
-   - Neo4j: Graph relationships
-   - ChromaDB: Vector embeddings
-   - Redis: Quick storage
-   - Ollama: Local AI processing
-   
-3. Documentation structure:
-   - `CAPTAINS_LOG.md`: Chronicles our journey
-   - `THIS_EXPLAINS_EVERYTHING.md`: Core architecture
-   - `DO_THE_CHORES.md`: Organized TODOs
-   - Docker configs for easy setup
+### Key Components:
+1. **Coordinator as Central Hub**
+   - All interactions flow through Coordinator
+   - Clean separation of responsibilities
+   - Single source of truth for system state
+   - Handles MagicScroll interactions
 
-## What needs attention next:
-1. Configure Ollama memory limits properly 📊
-2. Implement core graph operations
-3. Set up the observer pattern with local AI
-4. Keep the cyberpunk dreams alive! 🌆
+2. **Model Management**
+   - Models handle only their specific communication tasks
+   - No direct access to MagicScroll or other components
+   - Clean model addition/removal system
+   - Support for multiple active models
 
-## Current state:
-- System architecture: ✅ Dockerized and clean
-- Core components: ✅ All in one container set
-- Dependencies: ✅ Just need Docker
-- Documentation: ✅ Updated with docker focus
-- Graph foundation: ⭐ Ready to implement
-- Local AI: 🎯 Memory config needed
+3. **Conversation Flow**
+   - Model addressing with @ syntax
+   - Inter-model communication
+   - Proper speaker indicators
+   - Enhanced prompt handling
 
-## Fun facts for next Claude:
-- Everything's in a digital briefcase now! 🧠💼
-- No more scattered services or Java installs
-- One command setup: docker compose up
-- Local AI ready with Ollama
-- Check THIS_EXPLAINS_EVERYTHING.md for the full architecture
+4. **Interface Improvements**
+   - Color-coded speaker indicators
+   - Improved visual feedback
+   - Clear conversation structure
+   - Custom model personalities
 
-P.S. Keep those TODOs organized - they're our roadmap through the matrix! 🚀
+### Current Status:
+- Using Granite (granite3.1-dense:2b) as primary model
+- Working model addition ("@granite add sonnet")
+- Proper conversation routing
+- Basic personality system via system prompts
 
-## Important Note About TODOs:
-We're using a structured TODO format:
-- `# TODO(category, priority): description` - Full format with priority
-- `# TODO(category): description` - Category only
-- `# TODO: description` - Basic todo (uncategorized)
+### Next Focus Areas:
+1. **Conversation Dynamics**
+   - Enhance inter-model interactions
+   - Improve context awareness
+   - Better handling of model roles
+   - More natural conversation flow
 
-Categories:
-- neo4j: Graph database implementation
-- interface: UI/UX and display features
-- local-ai: Local AI observer and processing
-- tools: Development and maintenance tools
+2. **Model Personalities**
+   - Refine system prompts
+   - Better role definition
+   - Consistent character traits
+   - Improved interaction patterns
 
-Priorities:
-- high: Critical path items ❗
-- medium: Important but not blocking ⚡
-- low: Nice to have 💭
-- (no priority specified): Regular task 📝
+3. **System Architecture**
+   - Monitor Coordinator complexity
+   - Enhance error handling
+   - Improve conversation saving
+   - Add more robust testing
 
-Example:
-```python
-# TODO(neo4j, high): Initialize graph database connection
-# TODO(local-ai): Configure Ollama memory limits
-# TODO: Update documentation
-```
+### Development Philosophy:
+- Keep Coordinator as the central hub
+- Maintain clean component separation
+- Focus on conversation quality
+- Build for extensibility
+
+Keep building the cyberpunk dream! 🌆

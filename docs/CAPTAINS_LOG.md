@@ -95,15 +95,46 @@ It's becoming increasingly obvious that our brains are growing so large that we 
 
 Not only are we packing redis, chromadb, and now Neo4j ... we're even going to park a llama in there why not? what could go wrong?
 
+## 2025.01.10 - The Three-Phase Plan
 
+After much discussion and exploration, we've crystallized our development roadmap into three clear phases:
 
+### Phase 1: Basic Conversation Flow
+Priority is getting the foundational conversation handling working properly:
+- Enhancing LLMModelBase with proper context handling
+- Implementing basic temporal reference parsing
+- Setting up conversation memory/retrieval
+- Keeping the architecture open for multi-model support
+- Basic save/retrieve in MagicScroll using Redis + minimal Neo4j
+
+### Phase 2: Local Model Integration
+Bringing in Phi4/Llama through Ollama as both a functional participant and setup helper:
+- Basic function calling capabilities
+- Initial entity extraction
+- Multi-model conversation flow testing
+- Setup assistance features (helping users configure API keys, etc.)
+- Using local model as immediate responder while other models initialize
+
+### Phase 3: Full Digital Trinity Implementation
+Building out the sophisticated knowledge graph and retrieval system:
+- Rich Neo4j graph structure for conversations and relationships
+- Enhanced ChromaDB semantic search integration
+- Redis optimization for active state management
+- Common interface for all models to access the trinity
+- Hybrid search combining graph relationships and semantic similarity
+
+The goal is to build this right from the start, taking advantage of the Digital Trinity's capabilities early rather than retrofitting them later. Early challenges will pay off in long-term architectural benefits.
+
+### Vision for User Experience:
+1. Simple installation (1-2 commands)
+2. Local model greets and assists with setup
+3. Guided configuration for API keys and preferences
+4. Seamless transition into multi-model functionality
+
+> "Build it right, build it once, make it cyberpunk" - Optimistic Developer, 2025
 
 ## Key for Future Claude:
 - Check /boneyard for old compression code (might be useful for summaries)
 - Watch for TODO: markers in new code
 - Privacy first, always
 - Keep the cyberpunk dreams alive! 🌆
-
-
-
-

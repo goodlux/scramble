@@ -162,4 +162,38 @@ scramble/
 └── docs/               # You are here
 ```
 
+## Conversation Flow (as of 2025.1.11)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Coordinator
+    participant ActiveConversation
+    participant LLMModel
+    participant MagicScroll
+    
+    Note over User,MagicScroll: All interactions flow through Coordinator
+    User->>Coordinator: send message
+    Coordinator->>ActiveConversation: store message in history
+    Coordinator->>LLMModel: generate response
+    LLMModel-->>Coordinator: response
+    Coordinator->>ActiveConversation: store response in history
+    
+    Note over Coordinator,MagicScroll: On conversation end
+    Coordinator->>ActiveConversation: format conversation
+    Coordinator->>MagicScroll: save conversation
+```
+
+### Core Architectural Principle
+
+The Coordinator acts as the central hub for all system interactions. This architectural decision ensures:
+
+1. **Single Source of Truth**: All state changes and operations flow through one place
+2. **Simplified Debugging**: Clear tracing of operations and state changes
+3. **Controlled Access**: Components can't bypass intended workflows
+4. **Future Scalability**: Easy to add new components or modify flows
+5. **Clean Dependencies**: Components don't need to know about each other
+
+This centralized coordination pattern helps prevent the system from becoming a tangled web of cross-component communications. While we'll need to manage the Coordinator's complexity as the system grows, the benefits of clear flow control outweigh the maintenance considerations.
+
 Keep it contained, keep it clean, keep it cyberpunk! 🌆

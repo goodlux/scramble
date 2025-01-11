@@ -1,9 +1,13 @@
-# magic_scroll.py
 import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
-from datetime import datetime
-import logging
+from typing import List, Dict, Any, Optional, Union, cast, Literal as TypeLiteral
+from datetime import datetime, timedelta
+from neo4j import AsyncGraphDatabase, AsyncDriver, Query
+from neo4j.exceptions import ServiceUnavailable
+from typing_extensions import LiteralString
+from functools import partial
+
+# Local imports
 from .ms_entry import (
     MSEntry, 
     MSConversation, 
@@ -14,302 +18,370 @@ from .ms_entry import (
 )
 from .ms_index import MSIndexBase, LlamaIndexImpl
 from .ms_store import RedisStore
-import redis
-from llama_index.core import Document
-from typing import Optional, Dict, Any
+from .chroma_client import AsyncChromaClient, ChromaCollection
 
-from neo4j.exceptions import ServiceUnavailable
-
-from typing import Optional
-from neo4j import AsyncGraphDatabase, AsyncDriver
-import redis.asyncio as aioredis
-from chromadb import AsyncClient as ChromaAsyncClient
-from .config import config
-import logging
-
-
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
-
-
-logger = logging.getLogger(__name__)
-
-    # TODO: Neo4j - Initialize graph database connection
-    # TODO: Neo4j - Set up graph schema and constraints
-    # TODO: Neo4j - Implement connection pooling
-
-
-from pathlib import Path
-from typing import Optional
-from neo4j import AsyncGraphDatabase, AsyncDriver
+# Database clients and models
 import redis.asyncio as aioredis
 from redis.exceptions import ConnectionError as RedisConnectionError
-from .config import config
-import logging
+from llama_index.core import Document
+import asyncio
+from scramble.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+# Config
+from scramble.config import Config
+
+logger = get_logger(__name__)
+
+def literal_query(text: str) -> Query:
+    """Create a Query object from a string, casting to LiteralString."""
+    return Query(cast(LiteralString, text))
 
 class MagicScroll:
     def __init__(self):
         """Initialize basic components."""
-        # Initialize connections as None - will be set up in create()
+        # Service clients
         self._neo4j_driver: Optional[AsyncDriver] = None
         self._redis_client: Optional[aioredis.Redis] = None
-        self._chroma_client: Optional[ChromaAsyncClient] = None
+        self._chroma_client: Optional[AsyncChromaClient] = None
+        self.collection: Optional[ChromaCollection] = None
+        
+        # Core components
+        self.index: Optional[MSIndexBase] = None
+        self.doc_store: Optional[RedisStore] = None
+        
+        # Configuration
+        self.config = Config()
 
     @classmethod
     async def create(cls) -> 'MagicScroll':
         """Factory method to create and initialize MagicScroll asynchronously."""
         magic_scroll = cls()
         
-        # Initialize services if enabled
-        if config.is_redis_enabled():
-            await magic_scroll._init_redis()
-        else:
-            logger.info("Redis integration is disabled")
-
-        if config.is_neo4j_enabled():
-            await magic_scroll._init_neo4j()
-        else:
-            logger.info("Neo4j integration is disabled")
-            
-        # Initialize ChromaDB client
-        await magic_scroll._init_chroma()
-            
-        return magic_scroll
-    
-    async def _init_redis(self):
-        """Initialize Redis connection if enabled"""
         try:
-            redis_config = config.get_redis_config()
-            if redis_config:
-                self._redis_client = aioredis.Redis(
-                    host=redis_config["host"],
-                    port=redis_config["port"],
-                    db=redis_config["db"],
-                    decode_responses=True
-                )
-                # Test connection
-                await self._redis_client.ping()
-                logger.info("Redis connection initialized")
-        except RedisConnectionError:
-            logger.warning("Redis service not available - falling back to basic mode")
-            self._redis_client = None
-        except Exception as e:
-            logger.error(f"Failed to initialize Redis: {str(e)}")
-            self._redis_client = None
-            
-    @property
-    def has_graph(self) -> bool:
-        """Check if graph capabilities are available"""
-        return self._neo4j_driver is not None
+            # Initialize Redis
+            magic_scroll._redis_client = aioredis.Redis(
+                host=magic_scroll.config.REDIS_HOST,
+                port=magic_scroll.config.REDIS_PORT,
+                db=magic_scroll.config.REDIS_DB,
+                decode_responses=True
+            )
+            await magic_scroll._redis_client.ping()
+            logger.info("Redis connection initialized")
 
-    async def write_conversation(self,
-        content: str,
+            # Initialize Neo4j
+            magic_scroll._neo4j_driver = AsyncGraphDatabase.driver(
+                magic_scroll.config.NEO4J_URI,
+                auth=(magic_scroll.config.NEO4J_USER, magic_scroll.config.NEO4J_PASSWORD)
+            )
+            async with magic_scroll._neo4j_driver.session() as session:
+                await session.run("RETURN 1")
+            logger.info("Neo4j connection initialized")
+
+            # Initialize ChromaDB with async client
+            magic_scroll._chroma_client = await AsyncChromaClient.create(
+                base_url="http://localhost:8000"
+            )
+            
+            # Test ChromaDB connection with retries
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    if await magic_scroll._chroma_client.heartbeat():
+                        magic_scroll.collection = await magic_scroll._chroma_client.get_or_create_collection("magicscroll")
+                        logger.info("ChromaDB connection initialized")
+                        break
+                    retry_count += 1
+                    logger.warning(f"ChromaDB heartbeat failed, attempt {retry_count}/{max_retries}")
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    retry_count += 1
+                    logger.warning(f"ChromaDB connection attempt {retry_count}/{max_retries} failed: {e}")
+                    if retry_count >= max_retries:
+                        raise RuntimeError("Failed to connect to ChromaDB after multiple attempts")
+                    await asyncio.sleep(1)
+
+            if retry_count >= max_retries:
+                raise RuntimeError("Failed to connect to ChromaDB after multiple attempts")
+
+            if not magic_scroll.collection:
+                raise RuntimeError("ChromaDB collection not initialized")
+
+            # Initialize index after core services are ready
+            magic_scroll.index = await LlamaIndexImpl.create(
+                chroma_client=magic_scroll._chroma_client,
+                collection=magic_scroll.collection
+            )
+            
+            # Initialize Redis store with existing client
+            try:
+                magic_scroll.doc_store = await RedisStore.create(
+                    namespace='magicscroll',
+                    redis_client=magic_scroll._redis_client
+                )
+                logger.info("Redis store initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Redis store: {e}")
+                raise
+            
+            logger.info("Digital Trinity+ initialized successfully")
+            return magic_scroll
+
+        except Exception as e:
+            logger.error(f"Failed to initialize Digital Trinity+: {str(e)}")
+            raise RuntimeError("Failed to initialize required services. Ensure Docker containers are running.")
+
+    async def write_conversation(
+        self,
+        content: Union[str, Dict[str, Any]],  # Allow either string or dict
         metadata: Optional[List[str]] = None,
         parent_id: Optional[str] = None
     ) -> str:
-        """Write a conversation to the scroll."""
-        # TODO: Neo4j - Create conversation node
-        # TODO: Neo4j - Handle parent-child relationships
-        # TODO: Neo4j - Add temporal relationships
-        # TODO: Neo4j - Implement access control properties
-        entry = MSConversation(
-            content=content,
-            metadata={"tags": metadata} if metadata else None,
-            parent_id=parent_id
-        )
-        
+        """Write a conversation entry to the storage system."""
         try:
-            # Store in both Redis and vector index
-            doc = Document(
-                text=entry.content,
-                doc_id=entry.id,
-            )
-            
-            # Store in both stores via storage context
-            if await self.index.add_entry(entry):
-                logger.info(f"Added conversation entry {entry.id}")
-                return entry.id
-            else:
-                raise RuntimeError("Failed to write conversation to scroll")
+            if not self.index:
+                raise RuntimeError("Index not initialized")
                 
-        except Exception as e:
-            logger.error(f"Error writing conversation: {str(e)}")
-            raise RuntimeError(f"Failed to write conversation to scroll: {str(e)}")
-        
-    
-    async def write_document(self,
-        title: str,
-        content: str,
-        uri: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """
-        Write a document to the scroll.
-        
-        Args:
-            title: Document title
-            content: Document content
-            uri: Where the document is stored
-            metadata: Additional metadata
-            
-        Returns:
-            The ID of the new entry
-        """
-        entry = MSDocument(
-            title=title,
-            content=content,
-            uri=uri,
-            metadata=metadata
-        )
-        
-        if await self.index.add_entry(entry):
-            logger.info(f"Added document entry {entry.id}: {title}")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write document to scroll")
-    
-    async def write_image(self,
-        caption: str,
-        uri: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """
-        Write an image to the scroll.
-        
-        Args:
-            caption: Image description
-            uri: Where the image is stored
-            metadata: Additional metadata
-            
-        Returns:
-            The ID of the new entry
-        """
-        entry = MSImage(
-            caption=caption,
-            uri=uri,
-            metadata=metadata
-        )
-        
-        if await self.index.add_entry(entry):
-            logger.info(f"Added image entry {entry.id}")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write image to scroll")
-    
-    async def write_code(self,
-        code: str,
-        language: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """
-        Write code to the scroll.
-        
-        Args:
-            code: The code content
-            language: Programming language
-            metadata: Additional metadata
-            
-        Returns:
-            The ID of the new entry
-        """
-        entry = MSCode(
-            code=code,
-            language=language,
-            metadata=metadata
-        )
-        
-        if await self.index.add_entry(entry):
-            logger.info(f"Added code entry {entry.id} [{language}]")
-            return entry.id
-        else:
-            raise RuntimeError("Failed to write code to scroll")
-    
-    async def remember(self, query: str, entry_types: Optional[List[EntryType]] = None,
-                      limit: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
-        """Search the scroll's memory."""
+            # Handle both string and dict content formats
+            if isinstance(content, dict):
+                content_str = str(content)  # For index storage
+                temporal_metadata = content.get("temporal_context", [])
+            else:
+                content_str = content
+                temporal_metadata = []
 
-        # TODO: Neo4j - Enhance search with graph relationships
-        # TODO: Neo4j - Implement relationship-aware scoring
-        # TODO: Neo4j - Add temporal path finding
-        # Search vector index
-        results = await self.index.search(query, entry_types, limit, min_score)
-        
-        # Fetch full entries from Redis
-        enhanced_results = []
-        for result in results:
-            entry_id = result["entry"].id
-            full_entry = await self.doc_store.get_entry(entry_id)
-            if full_entry:
-                result["entry"] = full_entry
-                enhanced_results.append(result)
-        
-        return enhanced_results
-    
-    async def recall(self, entry_id: str) -> Optional[MSEntry]:
-        """
-        Recall a specific entry from the scroll.
-        
-        Args:
-            entry_id: The ID of the entry to recall
+            # Preserve existing metadata handling while adding temporal
+            metadata_dict: Dict[str, Any] = {
+                "tags": metadata,
+                "timestamp": datetime.utcnow().isoformat(),
+                "type": "conversation",
+                "temporal_references": temporal_metadata  # Add temporal data
+            } if metadata else {
+                "timestamp": datetime.utcnow().isoformat(),
+                "type": "conversation",
+                "temporal_references": temporal_metadata  # Add temporal data
+            }
+
+            # Create conversation entry
+            conversation = MSConversation(
+                content=content_str,
+                metadata=metadata_dict,
+                parent_id=parent_id
+            )
+
+            # Add to index
+            success = await self.index.add_entry(conversation)
+            if not success:
+                raise RuntimeError("Failed to add entry to index")
             
-        Returns:
-            The entry if found, None otherwise
-        """
-        return await self.index.get_entry(entry_id)
-    
-    async def forget(self, entry_id: str) -> bool:
-        """
-        Remove an entry from the scroll.
-        
-        Args:
-            entry_id: The ID of the entry to forget
+            # Store in Redis
+            redis_success = False
+            if self.doc_store:
+                try:
+                    redis_success = await self.doc_store.store_entry(conversation)
+                    if redis_success:
+                        logger.info(f"Successfully stored conversation {conversation.id} in Redis")
+                    else:
+                        logger.warning("Failed to store conversation in Redis")
+                except Exception as e:
+                    logger.error(f"Error storing in Redis: {e}")
+
+            # Store in Neo4j
+            if self._neo4j_driver:
+                try:
+                    async with self._neo4j_driver.session() as session:
+                        # Create base node
+                        await session.run(
+                            literal_query("""
+                            CREATE (e:Entry {
+                                id: $id,
+                                type: 'conversation',
+                                content: $content,
+                                created_at: datetime($timestamp)
+                            })
+                            """),
+                            id=conversation.id,
+                            content=content_str,
+                            timestamp=conversation.created_at.isoformat()
+                        )
+                        
+                        # Add temporal metadata if present
+                        if temporal_metadata:
+                            await session.run(
+                                literal_query("""
+                                MATCH (e:Entry {id: $id})
+                                SET e.temporal_references = $temporal_refs
+                                """),
+                                id=conversation.id,
+                                temporal_refs=temporal_metadata
+                            )
+                        
+                        # Add parent relationship if exists
+                        if parent_id:
+                            await session.run(
+                                literal_query("""
+                                MATCH (child:Entry {id: $child_id})
+                                MATCH (parent:Entry {id: $parent_id})
+                                CREATE (child)-[:CONTINUES]->(parent)
+                                """),
+                                child_id=conversation.id,
+                                parent_id=parent_id
+                            )
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to store in Neo4j: {e}")
             
-        Returns:
-            True if successfully forgotten
-        """
-        return await self.index.delete_entry(entry_id)
-    
-    async def recall_recent(self,
+            return conversation.id
+            
+        except Exception as e:
+            logger.error(f"Failed to write conversation: {e}")
+            raise
+
+    async def search(
+        self,
+        query: str,
+        entry_types: Optional[List[EntryType]] = None,
+        temporal_filter: Optional[Dict[str, datetime]] = None,
+        limit: int = 5
+    ) -> List[MSEntry]:
+        """Enhanced search with temporal filtering support."""
+        try:
+            if not self.index:
+                return []
+
+            # Use Neo4j for temporal queries if available
+            if self._neo4j_driver and temporal_filter:
+                try:
+                    async with self._neo4j_driver.session() as session:
+                        # Create temporal query
+                        neo4j_query = (
+                            "MATCH (e:Entry) "
+                            "WHERE e.created_at >= datetime($start) "
+                            "AND e.created_at <= datetime($end) "
+                        )
+                        
+                        if entry_types:
+                            neo4j_query += "AND e.type IN $types "
+                            
+                        neo4j_query += (
+                            "RETURN e "
+                            "ORDER BY e.created_at DESC "
+                            "LIMIT $limit"
+                        )
+                        
+                        result = await session.run(
+                            literal_query(neo4j_query),
+                            start=temporal_filter.get('start', datetime.min).isoformat(),
+                            end=temporal_filter.get('end', datetime.max).isoformat(),
+                            types=[t.value for t in entry_types] if entry_types else None,
+                            limit=limit
+                        )
+                        
+                        entries = []
+                        async for record in result:
+                            node = record["e"]
+                            entries.append(MSEntry(
+                                content=node["content"],
+                                entry_type=EntryType(node["type"]),
+                                id=node["id"],
+                                created_at=datetime.fromisoformat(str(node["created_at"]))
+                            ))
+                        return entries
+                        
+                except Exception as e:
+                    logger.warning(f"Neo4j temporal query failed, falling back to index: {e}")
+
+            # Fall back to index search
+            results = await self.index.search(
+                query=query,
+                entry_types=entry_types,
+                limit=limit
+            )
+            return [r["entry"] for r in results]
+
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            return []
+
+    async def get_recent(
+        self,
         hours: Optional[int] = None,
         entry_types: Optional[List[EntryType]] = None,
         limit: int = 10
     ) -> List[MSEntry]:
-        """
-        Recall recent entries from the scroll.
-        
-        Args:
-            hours: Optional time window
-            entry_types: Optional types to filter
-            limit: Maximum number of entries
+        """Get recent entries with enhanced temporal support."""
+        try:
+            if hours is not None:
+                end_time = datetime.utcnow()
+                start_time = end_time - timedelta(hours=hours)
+                
+                return await self.search(
+                    query="",  # Empty query to match all
+                    entry_types=entry_types,
+                    temporal_filter={
+                        'start': start_time,
+                        'end': end_time
+                    },
+                    limit=limit
+                )
             
-        Returns:
-            List of recent entries
-        """
-        return await self.index.get_recent(hours, entry_types, limit)
-    
-    async def recall_thread(self, entry_id: str) -> List[MSEntry]:
-        """
-        Recall a complete thread of entries.
-        
-        Args:
-            entry_id: Any entry ID in the thread
+            # If no hours specified, just get latest entries
+            if self.index:
+                return await self.index.get_recent(
+                    hours=hours,
+                    entry_types=entry_types,
+                    limit=limit
+                )
             
-        Returns:
-            List of entries in chronological order
-        """
-        return await self.index.get_chain(entry_id)
-    
-    async def summarize(self) -> Dict[str, Any]:
-        """Get a summary of the scroll's contents."""
-        recent = await self.recall_recent(hours=24)
-        types = {}
-        for entry in recent:
-            types[entry.entry_type.value] = types.get(entry.entry_type.value, 0) + 1
+            return []
             
-        return {
-            "recent_24h": len(recent),
-            "entry_types": types,
-            "latest_entry": recent[0].created_at if recent else None
-        }
+        except Exception as e:
+            logger.error(f"Error getting recent entries: {e}")
+            return []
+
+    async def get_conversation_chain(
+        self,
+        entry_id: str,
+        max_depth: int = 10
+    ) -> List[MSEntry]:
+        """Get the chain of conversations connected by parent_id."""
+        try:
+            if not self._neo4j_driver:
+                # Fallback to index implementation
+                if self.index:
+                    return await self.index.get_chain(entry_id)
+                return []
+
+            async with self._neo4j_driver.session() as session:
+                # Use Neo4j path finding to get the conversation chain
+                query = (
+                    f"MATCH path = (start:Entry {{id: $entry_id}}) "
+                    f"-[:CONTINUES*..{max_depth}]->(end:Entry) "
+                    "WHERE NOT (end)-[:CONTINUES]->() "
+                    "WITH nodes(path) as entries "
+                    "UNWIND entries as entry "
+                    "RETURN entry "
+                    "ORDER BY entry.created_at ASC"
+                )
+                
+                result = await session.run(
+                    literal_query(query),
+                    entry_id=entry_id
+                )
+                
+                entries = []
+                async for record in result:
+                    node = record["entry"]
+                    entry = MSEntry(
+                        content=node["content"],
+                        entry_type=EntryType(node["type"]),
+                        id=node["id"],
+                        created_at=datetime.fromisoformat(str(node["created_at"]))
+                    )
+                    entries.append(entry)
+                    
+                return entries
+                
+        except Exception as e:
+            logger.error(f"Error getting conversation chain: {e}")
+            return []
