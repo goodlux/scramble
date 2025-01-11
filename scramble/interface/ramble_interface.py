@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 from rich.console import Console
-from ..coordinator.coordinator import Coordinator
+from scramble.coordinator import Coordinator
 from .interface_base import InterfaceBase
 
 class RambleInterface(InterfaceBase):
@@ -10,6 +10,7 @@ class RambleInterface(InterfaceBase):
         self.model_name: Optional[str] = None
         self._setup_complete = False
         self.coordinator: Optional[Coordinator] = None
+        self.current_speaker: Optional[str] = None
 
     def set_model_name(self, name: str) -> None:
         """Set the model name to use.
@@ -34,19 +35,16 @@ class RambleInterface(InterfaceBase):
         await self.coordinator.start_conversation()
         self._setup_complete = True
 
+        # Send initial greeting through the coordinator
+        greeting_result = await self.coordinator.process_message("system: introduce yourself")
+        await self.display_model_output(greeting_result['response'], greeting_result['model'])
+
     async def run(self) -> None:
         """Run the interactive chat loop."""
         # Ensure setup
         if not self._setup_complete:
             await self.setup()
             
-        # Debug check
-        print(f"Coordinator exists: {self.coordinator is not None}")
-        if self.coordinator:
-            print(f"Coordinator methods: {dir(self.coordinator)}")
-            
-        await self.display_status("Welcome to Ramble! Type 'exit' to quit.")
-        
         while True:
             try:
                 # Get user input
@@ -65,15 +63,25 @@ class RambleInterface(InterfaceBase):
                 # Process through coordinator
                 result = await self.coordinator.process_message(user_input)
                 
-                # Display the response
-                await self.display_output(result['response'])
+                # Display the response with speaker indicator
+                await self.display_model_output(result['response'], result['model'])
                 
             except Exception as e:
                 await self.display_error(f"Error: {str(e)}")
 
     def format_prompt(self) -> str:
         """Format prompt based on current style."""
-        return "ramble> "
+        return "[bold cyan]you[/bold cyan]> "
+
+    def format_model_prompt(self, model_name: str) -> str:
+        """Format prompt for model responses."""
+        color = "green" if model_name == "granite" else "blue"  # Different colors for different models
+        return f"[bold {color}]{model_name}[/bold {color}]> "
+
+    async def display_model_output(self, content: str, model_name: str) -> None:
+        """Display model output with speaker indicator."""
+        prompt = self.format_model_prompt(model_name)
+        self.console.print(f"{prompt}{content}")
 
     async def display_output(self, content: str) -> None:
         """Display output to the user."""
@@ -89,7 +97,8 @@ class RambleInterface(InterfaceBase):
 
     async def get_input(self) -> str:
         """Get input from user."""
-        return input(self.format_prompt())
+        self.console.print(self.format_prompt(), end="")
+        return input()
 
     async def clear(self) -> None:
         """Clear the display."""

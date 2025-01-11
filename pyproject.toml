@@ -21,7 +21,6 @@ dependencies = [
     "sentence-transformers>=2.5.0",
     "numpy",
     "dateparser",
-    "litellm==1.12.1",
     "textual",
     "pyte",
     "redis>=5.0.1",
@@ -33,12 +32,15 @@ dependencies = [
     "llama-index-storage-docstore-redis>=0.1.0",
     "llama-index-storage-index-store-redis>=0.1.0",
     "duckdb",
-    "torch",
     "neo4j==5.15.0",
     "httpx>=0.26.0",
     "fastapi>=0.109.0",
+    "ollama>=0.1.6",
     "pydantic>=2.5.3",
-    "types-redis"
+    "torch",
+    "types-redis",
+    "pytest",
+    "aiofiles"
 ]
 
 [project.scripts]

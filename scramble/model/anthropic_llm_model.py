@@ -1,4 +1,4 @@
-"""Anthropic Claude model implementation with temporal context handling."""
+"""Anthropic Claude model implementation."""
 from typing import Dict, Any, AsyncGenerator, List, cast, Optional, Union
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ModelParam
@@ -30,16 +30,13 @@ class AnthropicLLMModel(LLMModelBase):
         )
 
     async def generate_response(self, prompt: str, **params: Any) -> Union[str, AsyncGenerator[str, None]]:
-        """Generate a response using the model with temporal context handling."""
+        """Generate a response using the model."""
         if not self.client or not self.model_id:
             raise RuntimeError("Model not initialized")
 
         try:
-            # Parse and inject temporal context
-            enhanced_prompt = await self._inject_temporal_context(prompt)
-            
             # Format the messages with context buffer
-            messages = self._format_messages_with_context(enhanced_prompt)
+            messages = self._format_messages_with_context(prompt)
             
             response = await self.client.messages.create(
                 model=cast(ModelParam, self.model_id),
@@ -53,7 +50,7 @@ class AnthropicLLMModel(LLMModelBase):
                 first_block = response.content[0]
                 response_text = getattr(first_block, 'text', '')
                 
-                # Add response to context buffer with temporal metadata
+                # Add response to context buffer
                 self._add_to_context(
                     role="assistant",
                     content=response_text,
@@ -83,16 +80,9 @@ class AnthropicLLMModel(LLMModelBase):
         
         # Add context buffer messages
         for msg in self.context_buffer:
-            # Format temporal references if present
-            content = msg["content"]
-            if "temporal_references" in msg["metadata"]:
-                refs = msg["metadata"]["temporal_references"]
-                if refs:
-                    content = self._format_temporal_context(content, refs)
-            
             formatted_messages.append(self._create_anthropic_message(
                 msg["role"],
-                content
+                msg["content"]
             ))
         
         # Add current prompt
@@ -102,19 +92,6 @@ class AnthropicLLMModel(LLMModelBase):
         ))
         
         return formatted_messages
-
-    def _format_temporal_context(self, content: str, temporal_refs: List[Dict[str, Any]]) -> str:
-        """Format content with temporal reference annotations."""
-        formatted_content = content
-        
-        # Add temporal context notes if needed
-        if temporal_refs:
-            temporal_context = "\nTemporal Context:\n"
-            for ref in temporal_refs:
-                temporal_context += f"- {ref['reference']}: {ref['timestamp']}\n"
-            formatted_content = temporal_context + "\n" + formatted_content
-            
-        return formatted_content
 
     def _create_anthropic_message(self, role: Role, content: str) -> MessageParam:
         """Create a message in Anthropic's format."""
@@ -128,16 +105,13 @@ class AnthropicLLMModel(LLMModelBase):
         prompt: str,
         **params: Any
     ) -> AsyncGenerator[str, None]:
-        """Stream completion using Anthropic client with temporal context."""
+        """Stream completion using Anthropic client."""
         if not self.client or not self.model_name:
             raise RuntimeError("Model not properly initialized")
 
         try:
-            # Inject temporal context
-            enhanced_prompt = await self._inject_temporal_context(prompt)
-            
             # Format messages with context
-            messages = self._format_messages_with_context(enhanced_prompt)
+            messages = self._format_messages_with_context(prompt)
 
             async with self.client.messages.stream(
                 model=cast(ModelParam, self.model_name),
@@ -185,8 +159,7 @@ class AnthropicLLMModel(LLMModelBase):
                 "analysis",
                 "creative",
                 "math",
-                "reasoning",
-                "temporal_context"  # Added new capability
+                "reasoning"
             ],
             "max_tokens": 4096 if (
                 "opus" in model_name or 
@@ -197,6 +170,5 @@ class AnthropicLLMModel(LLMModelBase):
             "supports_vision": (
                 "opus" in model_name or 
                 "sonnet" in model_name
-            ),
-            "supports_temporal_context": True  # Added new flag
+            )
         }

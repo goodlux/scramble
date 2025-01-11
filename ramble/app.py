@@ -5,7 +5,7 @@ Ramble - Context-aware CLI chat interface
 import asyncio
 import sys
 import click
-from typing import Dict, TypedDict
+from typing import Dict, TypedDict, Optional
 from rich.console import Console
 from scramble.interface.ramble_interface import RambleInterface
 from scramble.utils.logging import setup_logging, get_logger
@@ -25,7 +25,7 @@ DEFAULT_CONFIG: AppConfig = {
     'ui': {
         'prompt_style': 'cyberpunk'
     },
-    'model_name': 'sonnet'  # Changed to use simplified name
+    'model_name': 'granite'  # Changed to use simplified name
 }
 
 

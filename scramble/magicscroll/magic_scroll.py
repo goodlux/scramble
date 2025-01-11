@@ -131,8 +131,9 @@ class MagicScroll:
             logger.error(f"Failed to initialize Digital Trinity+: {str(e)}")
             raise RuntimeError("Failed to initialize required services. Ensure Docker containers are running.")
 
-    async def write_conversation(self,
-        content: str,
+    async def write_conversation(
+        self,
+        content: Union[str, Dict[str, Any]],  # Allow either string or dict
         metadata: Optional[List[str]] = None,
         parent_id: Optional[str] = None
     ) -> str:
@@ -141,23 +142,33 @@ class MagicScroll:
             if not self.index:
                 raise RuntimeError("Index not initialized")
                 
-            # Convert metadata list to dictionary format
+            # Handle both string and dict content formats
+            if isinstance(content, dict):
+                content_str = str(content)  # For index storage
+                temporal_metadata = content.get("temporal_context", [])
+            else:
+                content_str = content
+                temporal_metadata = []
+
+            # Preserve existing metadata handling while adding temporal
             metadata_dict: Dict[str, Any] = {
                 "tags": metadata,
-                "timestamp": datetime.utcnow().isoformat(),  # Add timestamp for temporal queries
-                "type": "conversation"
+                "timestamp": datetime.utcnow().isoformat(),
+                "type": "conversation",
+                "temporal_references": temporal_metadata  # Add temporal data
             } if metadata else {
                 "timestamp": datetime.utcnow().isoformat(),
-                "type": "conversation"
+                "type": "conversation",
+                "temporal_references": temporal_metadata  # Add temporal data
             }
-            
+
             # Create conversation entry
             conversation = MSConversation(
-                content=content,
+                content=content_str,
                 metadata=metadata_dict,
                 parent_id=parent_id
             )
-            
+
             # Add to index
             success = await self.index.add_entry(conversation)
             if not success:
@@ -190,9 +201,20 @@ class MagicScroll:
                             })
                             """),
                             id=conversation.id,
-                            content=content,
+                            content=content_str,
                             timestamp=conversation.created_at.isoformat()
                         )
+                        
+                        # Add temporal metadata if present
+                        if temporal_metadata:
+                            await session.run(
+                                literal_query("""
+                                MATCH (e:Entry {id: $id})
+                                SET e.temporal_references = $temporal_refs
+                                """),
+                                id=conversation.id,
+                                temporal_refs=temporal_metadata
+                            )
                         
                         # Add parent relationship if exists
                         if parent_id:
@@ -205,7 +227,7 @@ class MagicScroll:
                                 child_id=conversation.id,
                                 parent_id=parent_id
                             )
-                            
+                        
                 except Exception as e:
                     logger.warning(f"Failed to store in Neo4j: {e}")
             
