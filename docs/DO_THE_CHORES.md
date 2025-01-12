@@ -1,17 +1,10 @@
 # 🧹 scRAMble Chores List
 
-Generated on: 2025-01-09 03:05:53
+Generated on: 2025-01-11 16:19:09
 
 > This file is auto-generated. Edit the TODOs in the source files!
 
 ## Categories
-
-### Living-Room
-
-📝 Priority NONE:
-- [ ] Nomena's Configuration (`scramble/config.py:25`)
-- [ ] Add room-specific database if needed (`scramble/config.py:43`)
-- [ ] Add room-specific Redis DB if needed (`scramble/config.py:56`)
 
 ### Uncategorized
 
@@ -43,13 +36,6 @@ File: `ramblemaxx/app.py`
 - [ ] 📝  Line 45: Interface - Add graph visualization area
 - [ ] 📝  Line 46: Interface - Prepare observer panel
 - [ ] 📝  Line 47: Interface - Add relationship display
-
-### config.py
-File: `scramble/config.py`
-
-- [ ] 📝 (living-room) Line 25: Nomena's Configuration
-- [ ] 📝 (living-room) Line 43: Add room-specific database if needed
-- [ ] 📝 (living-room) Line 56: Add room-specific Redis DB if needed
 
 ### observer_concept.py
 File: `scramble/interface/observer_concept.py`
