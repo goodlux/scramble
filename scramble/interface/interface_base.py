@@ -3,8 +3,11 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from datetime import datetime
 import asyncio
+from scramble.utils.logging import get_logger
 
 from scramble.coordinator.coordinator import Coordinator
+
+logger = get_logger(__name__)
 
 class InterfaceBase(ABC):
     """Base interface that supports core Scramble functionality."""
@@ -30,8 +33,7 @@ class InterfaceBase(ABC):
         if self._setup_complete:
             return
             
-        self.coordinator = Coordinator()
-        # Initialize the coordinator asynchronously
+        self.coordinator = await Coordinator.create()
         await self.coordinator.initialize()
         self._setup_complete = True
     
@@ -47,9 +49,12 @@ class InterfaceBase(ABC):
                 user_input = await self.get_input()
                 
                 if user_input.lower() in ['exit', 'quit', ':q']:
+                    if self.coordinator:
+                        logger.info("Saving conversation...")
+                        await self.coordinator.save_conversation_to_magicscroll()
                     break
                     
-                await self.handle_input(user_input)
+                await self.handle_user_input(user_input)
                 
         except KeyboardInterrupt:
             await self._emergency_shutdown()
@@ -88,21 +93,44 @@ class InterfaceBase(ABC):
         """Clear the display."""
         raise NotImplementedError
     
-    # Input handling
-    async def handle_input(self, user_input: str) -> None:
+    async def handle_user_input(self, user_input: str) -> None:
         """Process user input."""
         if not self.coordinator:
             raise RuntimeError("Coordinator not initialized")
             
         try:
+            # Handle system commands
+            if user_input.startswith('/'):
+                command = user_input[1:].split()
+                match command[0]:
+                    case 'add':
+                        if len(command) > 1:
+                            await self.coordinator.add_model_to_conversation(command[1])
+                            await self.display_output(f"system> {command[1]} was added to the conversation")
+                    case 'remove':
+                        if len(command) > 1:
+                            await self.coordinator.remove_model_from_conversation(command[1])
+                            await self.display_output(f"system> {command[1]} was removed from the conversation")
+                    case _:
+                        pass  # Handle unknown commands
+                return
+
+            # Regular message - pass to coordinator
             response = await self.coordinator.process_message(user_input)
-            # Display the response if there is one
             if response and response.get("response"):
-                await self.display_output(response["response"])
+                model_name = response.get("model", "system")
+                if model_name == "system":
+                    await self.display_output(f"system> {response['response']}")
+                else:
+                    await self.display_output(response["response"])
+                
         except Exception as e:
             await self.display_error(f"Error processing input: {e}")
     
     async def _emergency_shutdown(self) -> None:
         """Handle emergency shutdown."""
         await self.display_status("\n🚨 Emergency shutdown initiated")
+        if self.coordinator:
+            logger.info("Saving conversation...")
+            await self.coordinator.save_conversation_to_magicscroll()
         self._shutdown_requested = True

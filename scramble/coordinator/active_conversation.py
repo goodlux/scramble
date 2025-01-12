@@ -1,29 +1,24 @@
 """Manages active conversation sessions."""
 from dataclasses import dataclass, field
 from datetime import datetime
-import asyncio
 from typing import Set, List, Optional, Dict, Any
-from .temporal_processor import TemporalProcessor, TemporalReference
 
 @dataclass
 class ConversationMessage:
     """Represents a single message in the conversation."""
     content: str
-    speaker: str  # 'user' or model_name (e.g., 'phi4', 'sonnet')
+    speaker: str  # 'user', 'system', or model_name
+    recipient: Optional[str] = None  # Who the message is addressed to
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    temporal_references: List[TemporalReference] = field(default_factory=list)
 
 class ActiveConversation:
     """Represents a live conversation session."""
     
     def __init__(self):
-        self.message_queue: asyncio.Queue[ConversationMessage] = asyncio.Queue()
+        """Initialize conversation state."""
         self.active_models: Set[str] = set()
         self.messages: List[ConversationMessage] = []
-        self.current_entry_id: Optional[str] = None  # Links to MSConversation
         self.start_time: datetime = datetime.utcnow()
-        self.temporal_processor = TemporalProcessor()
         
         # Dialogue state handling
         self.current_speaker: Optional[str] = None
@@ -74,36 +69,29 @@ class ActiveConversation:
             
         last_seen = self.listener_states[model_name]
         return [msg for msg in self.messages if msg.timestamp > last_seen]
+    
+    def get_last_n_messages(self, n: int) -> List[ConversationMessage]:
+        """Get the last n messages from the conversation."""
+        return self.messages[-n:] if self.messages else []
 
-    async def add_message(self, content: str, speaker: str, metadata: Optional[Dict[str, Any]] = None) -> None:
-        """Add a message to the conversation queue with temporal processing."""
-        # Process temporal references for user messages
-        temporal_refs = []
-        if speaker == "user":
-            temporal_refs = self.temporal_processor.parse_temporal_references(content)
+    def get_messages_since(self, timestamp: datetime) -> List[ConversationMessage]:
+        """Get all messages since a specific timestamp."""
+        return [msg for msg in self.messages if msg.timestamp > timestamp]
 
+    async def add_message(self, content: str, speaker: str, recipient: Optional[str] = None) -> None:
+        """Add a message to the conversation."""
         message = ConversationMessage(
             content=content,
             speaker=speaker,
-            metadata=metadata or {},
-            temporal_references=temporal_refs
+            recipient=recipient,
         )
         self.messages.append(message)
-        await self.message_queue.put(message)
         
         # Update listener states when a message is added
-        if speaker != "user":
+        if speaker != "user" and speaker != "system":
             for model in self.active_models:
                 if model.lower() != speaker.lower():  # Case-insensitive comparison
                     self.listener_states[model] = message.timestamp
-
-    def get_temporal_context(self) -> List[TemporalReference]:
-        """Get temporal context from conversation history."""
-        temporal_context = []
-        for msg in self.messages:
-            if msg.temporal_references:
-                temporal_context.extend(msg.temporal_references)
-        return temporal_context
 
     def format_conversation(self) -> str:
         """Format the conversation for storage."""
@@ -111,29 +99,27 @@ class ActiveConversation:
         for msg in self.messages:
             # Just use the speaker name directly - it's already what we want
             prefix = "User" if msg.speaker == "user" else msg.speaker.capitalize()
-            formatted_messages.append(f"{prefix}: {msg.content}")
+            if msg.recipient:
+                formatted_messages.append(f"{prefix} to {msg.recipient}: {msg.content}")
+            else:
+                formatted_messages.append(f"{prefix}: {msg.content}")
         return "\n".join(formatted_messages)
 
-    def format_conversation_with_temporal(self) -> Dict[str, Any]:
-        """Format conversation with temporal metadata for storage."""
+    def format_conversation_for_storage(self) -> Dict[str, Any]:
+        """Format conversation for storage with metadata."""
         formatted_messages = []
-        temporal_refs = []
         
         for msg in self.messages:
             formatted_msg = {
-                "speaker": msg.speaker,  # Already the clean model_name
+                "speaker": msg.speaker,
+                "recipient": msg.recipient,
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat(),
-                "temporal_references": msg.temporal_references,
-                "metadata": msg.metadata
             }
             formatted_messages.append(formatted_msg)
-            if msg.temporal_references:
-                temporal_refs.extend(msg.temporal_references)
                 
         return {
             "messages": formatted_messages,
-            "temporal_context": temporal_refs,
             "start_time": self.start_time.isoformat(),
             "active_models": list(self.active_models)
         }

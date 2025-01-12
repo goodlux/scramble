@@ -1,6 +1,12 @@
-"""Coordinator for model and scroll system."""
-from typing import Dict, List, Any, Optional
-from datetime import timedelta
+"""Coordinator for model and scroll system.
+
+TODO: 
+- Implement proper user identification and tracking
+- Replace hardcoded "User" recipient with actual user IDs
+- Consider adding user session management
+"""
+from typing import Dict, List, Any, Optional, Tuple
+from datetime import datetime
 import re
 from scramble.utils.logging import get_logger
 from .active_conversation import ActiveConversation
@@ -20,7 +26,7 @@ class Coordinator:
         """Initialize the coordination system."""
         self.scroll: Optional[MagicScroll] = None
         self.active_models: Dict[str, LLMModelBase] = {}
-        self.conversation: Optional[ActiveConversation] = None
+        self.active_conversation: Optional[ActiveConversation] = None
         self.temporal_processor = TemporalProcessor()
 
     @classmethod
@@ -39,33 +45,57 @@ class Coordinator:
             logger.error(f"Failed to initialize core systems: {e}")
             raise
 
-    async def _handle_add_model_request(self, message: str) -> Optional[str]:
-        """Handle requests to add a new model to the conversation."""
-        KNOWN_MODELS = {"sonnet", "opus", "haiku", "phi4", "granite"}  # Add all valid models
-        
-        # Direct command pattern checking
-        message = message.lower().strip()
+    def find_model_mentions(self, message: str) -> List[str]:
+        """Find all @model mentions in a message."""
+        mentions = []
         words = message.split()
-        
-        # Look for model name after specific command words
-        for i, word in enumerate(words):
-            if word in {"add", "bring", "include", "invite"}:
-                if i + 1 < len(words):
-                    potential_model = words[i + 1].rstrip(",.!?")
-                    if potential_model in KNOWN_MODELS:
-                        return potential_model
-                        
-        # Check for complete phrases
-        for model in KNOWN_MODELS:
-            if f"add {model}" in message or \
-               f"bring in {model}" in message or \
-               f"include {model}" in message or \
-               f"start chatting with {model}" in message:
-                return model
-                
-        return None
+        for word in words:
+            if word.startswith('@'):
+                model_name = word[1:].lower()
+                # Case-insensitive model name lookup
+                for active_model in self.active_models:
+                    if active_model.lower() == model_name:
+                        mentions.append(active_model)
+        return mentions
 
-    async def add_model(self, model_name: str) -> None:
+    async def provide_context_to_model(self, model_name: str) -> None:
+        """Provide necessary context to a model that's newly addressed."""
+        if not self.active_conversation:
+            return
+
+        missed_messages = self.active_conversation.get_context_for_model(model_name)
+        if not missed_messages or not missed_messages:
+            return
+
+        # Format context for the model
+        context = "Here's what you missed:\n"
+        for msg in missed_messages:
+            if msg.recipient:
+                context += f"[{msg.timestamp.strftime('%H:%M')}] {msg.speaker} to {msg.recipient}: {msg.content}\n"
+            else:
+                context += f"[{msg.timestamp.strftime('%H:%M')}] {msg.speaker}: {msg.content}\n"
+
+        if context != "Here's what you missed:\n":
+            model = self.active_models[model_name]
+            response = await model.generate_response(context)
+
+            # Handle both string and async generator responses
+            if isinstance(response, str):
+                response_text = response
+            else:
+                response_chunks = []
+                async for chunk in response:
+                    response_chunks.append(chunk)
+                response_text = "".join(response_chunks)
+
+            if response_text:
+                await self.active_conversation.add_message(
+                    content=response_text,
+                    speaker=model_name,
+                    recipient="User"  # TODO: Replace with actual user ID
+                )
+
+    async def add_model_to_conversation(self, model_name: str) -> None:
         """Add a new model to the active set."""
         try:
             # Get model configuration
@@ -84,8 +114,13 @@ class Coordinator:
                 raise ValueError(f"Unsupported provider: {provider}")
 
             self.active_models[model_name] = model
-            if self.conversation:
-                self.conversation.add_model(model_name)
+            if self.active_conversation:
+                self.active_conversation.add_model(model_name)
+                await self.active_conversation.add_message(
+                    content=f"{model_name} was added to the conversation",
+                    speaker="system",
+                    recipient=None
+                )
             logger.info(f"Added model: {model_name} (provider: {provider})")
 
         except Exception as e:
@@ -94,101 +129,67 @@ class Coordinator:
 
     async def start_conversation(self) -> None:
         """Start a new conversation session."""
-        self.conversation = ActiveConversation()
+        self.active_conversation = ActiveConversation()
         for model_name in self.active_models:
-            self.conversation.add_model(model_name)
+            self.active_conversation.add_model(model_name)
+        # Add system message for conversation start
+        await self.active_conversation.add_message(
+            content="Started new conversation session",
+            speaker="system",
+            recipient=None
+        )
         logger.info("New conversation session started")
 
     async def process_message(self, message: str) -> Dict[str, Any]:
         """Process a user message through the conversation system."""
         try:
-            if not self.conversation:
+            if not self.active_conversation:
                 await self.start_conversation()
 
             if not self.scroll:
                 raise RuntimeError("MagicScroll not initialized")
 
-            if not self.conversation:
+            if not self.active_conversation:
                 raise RuntimeError("Failed to initialize conversation")
 
             if not self.active_models:
                 raise RuntimeError("No active models available")
 
-            # Check if message is addressed to a specific model
-            addressed_model, cleaned_message = self.conversation.parse_addressed_model(message)
-            
-            # If addressed to a model, check for model addition request
-            if addressed_model:
-                requested_model = await self._handle_add_model_request(cleaned_message)
-                if requested_model:
-                    try:
-                        await self.add_model(requested_model)
-                        response_text = f"Alright, {requested_model} is now in the loop. I'll keep an eye on things."
-                        await self.conversation.add_message(
-                            content=response_text,
-                            speaker=addressed_model
-                        )
-                        return {
-                            "response": response_text,
-                            "model": addressed_model
-                        }
-                    except Exception as e:
-                        error_msg = f"Hit a snag trying to bring in {requested_model}. Error: {str(e)}"
-                        await self.conversation.add_message(
-                            content=error_msg,
-                            speaker=addressed_model
-                        )
-                        return {
-                            "response": error_msg,
-                            "model": addressed_model
-                        }
+            # Find mentions anywhere in the message
+            mentions = self.find_model_mentions(message)
+            mentioned_model = mentions[0] if mentions else None
 
-            # Process temporal references
-            temporal_refs = self.temporal_processor.parse_temporal_references(
-                cleaned_message if addressed_model else message
-            )
-            
-            if temporal_refs:
-                logger.info(f"Found temporal references in message: {message}")
-                for ref in temporal_refs:
-                    logger.info(f"Temporal reference: type={ref['type']}, original_text='{ref['original_text']}', value={ref['value']}")
+            # Get the model that should respond (mentioned or current speaker)
+            responding_model = mentioned_model
+            if not responding_model:
+                # If no model mentioned, use current speaker or default to first model
+                responding_model = list(self.active_models.keys())[0]
 
-            # Add user message with temporal context
-            await self.conversation.add_message(
+            # Add user message to conversation 
+            await self.active_conversation.add_message(
                 message, 
                 speaker="user",
-                metadata={"temporal_references": temporal_refs} if temporal_refs else None
+                recipient=mentioned_model
             )
 
-            # Simple temporal lookup for testing flow
-            enhanced_prompt = cleaned_message if addressed_model else message
-            if temporal_refs and self.scroll and self.scroll.doc_store:
-                try:
-                    logger.info("Attempting to retrieve recent entries from Redis...")
-                    recent_entries = await self.scroll.get_recent(hours=24, limit=3)
-                    if recent_entries:
-                        logger.info(f"Found {len(recent_entries)} recent entries")
-                        context_str = "\nRecent conversation context:\n"
-                        for entry in recent_entries:
-                            logger.info(f"Retrieved entry: {entry.content[:100]}...")
-                        enhanced_prompt = f"{context_str}\n{enhanced_prompt}"
-                        logger.info("Successfully enhanced prompt with historical context")
-                    else:
-                        logger.info("No recent entries found in Redis")
-                except Exception as e:
-                    logger.warning(f"Temporal lookup failed (skipping): {e}")
+            # If there's a mentioned model, provide context
+            if mentioned_model:
+                missed_context = self.active_conversation.get_context_for_model(mentioned_model)
+                context = ""
+                if missed_context:
+                    context = "Previous messages in thread:\n"
+                    for msg in missed_context:
+                        if msg.recipient:
+                            context += f"[{msg.timestamp.strftime('%H:%M')}] {msg.speaker} to {msg.recipient}: {msg.content}\n"
+                        else:
+                            context += f"[{msg.timestamp.strftime('%H:%M')}] {msg.speaker}: {msg.content}\n"
+                    context += "\nCurrent message:\n"
+                message = f"{context}{message}" if context else message
 
-            # Get response from appropriate model
-            if addressed_model and addressed_model in self.active_models:
-                model = self.active_models[addressed_model]
-                responding_model = addressed_model
-            else:
-                # Default to first available model
-                responding_model = next(iter(self.active_models.keys()))
-                model = self.active_models[responding_model]
-
-            response = await model.generate_response(enhanced_prompt)
-
+            # Generate response
+            model = self.active_models[responding_model]
+            response = await model.generate_response(message)
+            
             # Process response
             if isinstance(response, str):
                 response_text = response
@@ -199,27 +200,31 @@ class Coordinator:
                 response_text = "".join(response_chunks)
 
             # Add model response to conversation
-            await self.conversation.add_message(
+            await self.active_conversation.add_message(
                 content=response_text,
-                speaker=responding_model
+                speaker=responding_model,
+                recipient="User"  # TODO: Replace with actual user ID
             )
 
-            # Return response with model name
             return {
                 "response": response_text,
-                "model": responding_model,
-                "temporal_context": temporal_refs if temporal_refs else None
+                "model": responding_model
             }
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
             raise
 
-    async def remove_model(self, model_name: str) -> None:
+    async def remove_model_from_conversation(self, model_name: str) -> None:
         """Remove a model from the active set."""
         if model_name in self.active_models:
-            if self.conversation:
-                self.conversation.remove_model(model_name)
+            if self.active_conversation:
+                await self.active_conversation.add_message(
+                    content=f"{model_name} was removed from the conversation",
+                    speaker="system",
+                    recipient=None
+                )
+                self.active_conversation.remove_model(model_name)
             del self.active_models[model_name]
             logger.info(f"Removed model: {model_name}")
 
@@ -227,21 +232,24 @@ class Coordinator:
         """Get list of currently active model names."""
         return list(self.active_models.keys())
 
+    async def save_conversation_to_magicscroll(self) -> str:
+        """Save the current conversation to MagicScroll storage."""
+        return await self.end_conversation()
+
     async def end_conversation(self) -> str:
         """End the current conversation and save it to storage."""
         try:
-            if not self.conversation or not self.scroll:
+            if not self.active_conversation or not self.scroll:
                 raise RuntimeError("No active conversation to end")
 
             # Format and save the complete conversation
-            formatted_conv = self.conversation.format_conversation_with_temporal()
+            formatted_conv = self.active_conversation.format_conversation_for_storage()
             metadata = ["conversation"]
             
-            # Add more visible logging for conversation saving
             logger.info("=" * 50)
             logger.info("Saving conversation to MagicScroll...")
-            logger.info(f"Active models: {', '.join(self.conversation.active_models)}")
-            logger.info(f"Messages in conversation: {len(self.conversation.messages)}")
+            logger.info(f"Active models: {', '.join(self.active_conversation.active_models)}")
+            logger.info(f"Messages in conversation: {len(self.active_conversation.messages)}")
             
             entry_id = await self.scroll.write_conversation(
                 content=formatted_conv,
@@ -252,7 +260,7 @@ class Coordinator:
             logger.info("=" * 50)
 
             # Clear the current conversation
-            self.conversation = None
+            self.active_conversation = None
 
             return entry_id
 

@@ -2,6 +2,9 @@ from typing import Literal, Optional
 from rich.console import Console
 from scramble.coordinator import Coordinator
 from .interface_base import InterfaceBase
+from scramble.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 class RambleInterface(InterfaceBase):
     def __init__(self):
@@ -31,43 +34,13 @@ class RambleInterface(InterfaceBase):
         if not self.model_name:
             raise ValueError("Model name not set")
 
-        await self.coordinator.add_model(self.model_name)
+        await self.coordinator.add_model_to_conversation(self.model_name)
         await self.coordinator.start_conversation()
         self._setup_complete = True
 
         # Send initial greeting through the coordinator
         greeting_result = await self.coordinator.process_message("system: introduce yourself")
         await self.display_model_output(greeting_result['response'], greeting_result['model'])
-
-    async def run(self) -> None:
-        """Run the interactive chat loop."""
-        # Ensure setup
-        if not self._setup_complete:
-            await self.setup()
-            
-        while True:
-            try:
-                # Get user input
-                user_input = await self.get_input()
-                
-                if user_input.lower() in ['exit', 'quit']:
-                    await self.display_status("Goodbye!")
-                    break
-                    
-                if not user_input.strip():
-                    continue
-                
-                if not self.coordinator:
-                    raise RuntimeError("Coordinator not initialized")
-                    
-                # Process through coordinator
-                result = await self.coordinator.process_message(user_input)
-                
-                # Display the response with speaker indicator
-                await self.display_model_output(result['response'], result['model'])
-                
-            except Exception as e:
-                await self.display_error(f"Error: {str(e)}")
 
     def format_prompt(self) -> str:
         """Format prompt based on current style."""
