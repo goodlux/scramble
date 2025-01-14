@@ -195,7 +195,7 @@ class LlamaIndexImpl(MSIndexBase):
                 logger.error("Collection or index not initialized")
                 return False
 
-            # Add debug logging for ChromaDB collection size
+            # Add debug logging for collection size
             count = await self.collection.count()
             logger.info(f"Current ChromaDB collection size: {count}")
             
@@ -209,7 +209,7 @@ class LlamaIndexImpl(MSIndexBase):
             logger.debug(f"Entry content preview: {entry.content[:100]}...")
             logger.debug(f"Raw metadata: {entry.metadata}")
                         
-            # First convert entry to dict and then sanitize for ChromaDB
+            # Convert entry to dict and sanitize for ChromaDB
             entry_dict = entry.to_dict()
             logger.debug(f"Entry dict: {entry_dict}")
             
@@ -223,28 +223,38 @@ class LlamaIndexImpl(MSIndexBase):
                 extra_info=metadata_dict
             )
             
-            # Get embedding
+            # Get embedding using the model's async-safe method
             logger.debug("Getting text embedding...")
-            embedding = Settings.embed_model.get_text_embedding(entry.content)
+            embedding = await self._get_embedding_async(entry.content)
             logger.debug(f"Embedding shape: {len(embedding)}")
             
-            # Debug log the data being sent to ChromaDB
+            # Debug log ChromaDB payload
             logger.debug("Preparing ChromaDB payload...")
             
-            # Add to collection
+            # Add to collection with proper error handling
             logger.debug("Sending to ChromaDB...")
-            await self.collection.add(
-                embeddings=[embedding],
-                metadata_list=[metadata_dict],
-                documents=[entry.content],
-                ids=[entry.id]
-            )
+            try:
+                await self.collection.add(
+                    embeddings=[embedding],
+                    metadata_list=[metadata_dict],
+                    documents=[entry.content],
+                    ids=[entry.id]
+                )
+                logger.info(f"Successfully added entry to ChromaDB: {entry.id}")
+            except Exception as ce:
+                logger.error(f"Error adding to ChromaDB: {ce}")
+                return False
             
             # Add to document store
             if self.index.storage_context:
                 logger.debug("Adding to document store...")
-                self.index.storage_context.docstore.add_documents([doc])
-                self.index.storage_context.persist(persist_dir=str(self.storage_path))
+                try:
+                    self.index.storage_context.docstore.add_documents([doc])
+                    await self._persist_storage_async()
+                    logger.debug("Successfully persisted to storage")
+                except Exception as se:
+                    logger.error(f"Error adding to storage: {se}")
+                    return False
             
             logger.debug(f"Successfully added entry {entry.id} to index")
             return True
@@ -283,15 +293,17 @@ class LlamaIndexImpl(MSIndexBase):
             return False
     
 
-    async def search(self,
+    async def search(
+        self,
         query: str,
         entry_types: Optional[List[EntryType]] = None,
         limit: int = 5,
         min_score: float = 0.0
     ) -> List[Dict[str, Any]]:
-        """Search for entries."""
+        """Search for entries using vector store."""
         try:
             if not self.index:
+                logger.warning("Index not initialized")
                 return []
                 
             logger.info(f"Beginning search for query: {query}")
@@ -304,34 +316,43 @@ class LlamaIndexImpl(MSIndexBase):
                 }
                 logger.debug(f"Using metadata filter: {metadata_filter}")
             
-            # Create query
+            # Create vector store query
             vector_store_query = VectorStoreQuery(
                 query_str=query,
-                similarity_top_k=limit * 2  # Get extra results for score filtering
+                similarity_top_k=limit * 2  # Get extra results for filtering
             )
             logger.debug(f"Created vector store query: {vector_store_query}")
             
-            # Execute query without OpenAI dependency
+            # Execute query
             query_engine = self.index.as_query_engine(
                 vector_store_query=vector_store_query,
                 similarity_top_k=limit * 2,
-                response_synthesizer=None  # This prevents OpenAI usage
+                response_synthesizer=None  # Prevent OpenAI usage
             )
             logger.info("Executing query...")
-            query_result = query_engine.query(query)
-            logger.info(f"Query completed. Source nodes: {len(query_result.source_nodes)}")
+            
+            # Execute query and handle async results
+            try:
+                query_result = await query_engine.query(query)
+                logger.info(f"Query completed. Source nodes: {len(query_result.source_nodes)}")
+            except Exception as qe:
+                logger.error(f"Error executing query: {qe}")
+                return []
             
             # Process results
             results = []
             for node in query_result.source_nodes:
-                if hasattr(node, 'score') and node.score < min_score:
-                    continue
-                    
                 try:
+                    # Filter by minimum score
+                    if hasattr(node, 'score') and node.score < min_score:
+                        continue
+                        
+                    # Extract metadata safely
                     metadata = getattr(node, 'metadata', {})
                     if not metadata:
                         continue
 
+                    # Create entry and append result
                     entry = MSEntry.from_dict(metadata)
                     result = {
                         "entry": entry,
@@ -339,9 +360,11 @@ class LlamaIndexImpl(MSIndexBase):
                         "relevance_score": getattr(node, 'relevance_score', 1.0)
                     }
                     results.append(result)
+                    logger.debug(f"Added result for entry {entry.id} with score {result['score']}")
                  
                 except Exception as e:
-                    logger.error(f"Error processing node {node.node_id}: {e}")
+                    logger.error(f"Error processing node {getattr(node, 'node_id', 'unknown')}: {e}")
+                    continue
             
             # Sort by score and limit results
             results.sort(key=lambda x: x["score"], reverse=True)
@@ -350,7 +373,8 @@ class LlamaIndexImpl(MSIndexBase):
         except Exception as e:
             logger.error(f"Error searching index: {e}")
             return []
-    
+        
+
     async def get_recent(self,
         hours: Optional[int] = None,
         entry_types: Optional[List[EntryType]] = None,
@@ -433,3 +457,30 @@ class LlamaIndexImpl(MSIndexBase):
                 return False
                 
         return True
+    
+    async def _get_embedding_async(self, text: str) -> List[float]:
+        """Get embedding in an async-safe way."""
+        try:
+            loop = asyncio.get_event_loop()
+            embedding = await loop.run_in_executor(
+                None,
+                lambda: Settings.embed_model.get_text_embedding(text)
+            )
+            return embedding
+        except Exception as e:
+            logger.error(f"Error getting embedding: {e}")
+            raise
+
+    async def _persist_storage_async(self) -> None:
+        """Persist storage context asynchronously."""
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.index.storage_context.persist(
+                    persist_dir=str(self.storage_path)
+                )
+            )
+        except Exception as e:
+            logger.error(f"Error persisting storage: {e}")
+            raise

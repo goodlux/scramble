@@ -24,7 +24,7 @@ dependencies = [
     "textual",
     "pyte",
     "redis>=5.0.1",
-    "chromadb>=0.4.22",
+    "chromadb>=0.5.23",
     "chromadb-client>=0.6.2",
     "llama-index-core>=0.10.0",
     "llama-index-embeddings-huggingface>=0.1.0",
