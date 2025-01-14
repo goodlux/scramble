@@ -5,27 +5,28 @@ services:
   neo4j:
     image: neo4j:5.15.0
     environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-scR4Mble#Graph!}
+      - NEO4J_AUTH=none
       - NEO4J_PLUGINS=["graph-data-science", "apoc"]
       # Memory settings for Neo4j
       - NEO4J_server_memory_heap_initial__size=512m
       - NEO4J_server_memory_heap_max__size=2G
       - NEO4J_server_memory_pagecache_size=1G
     ports:
-      - "7474:7474"  # Browser interface
-      - "7687:7687"  # Bolt protocol
+      - "7474:7474" # Browser interface
+      - "7687:7687" # Bolt protocol
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - ./scramble/db/neo4j/schema:/import
+      - ./scramble/db/neo4j/scripts:/scripts
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   chroma:
-    image: ghcr.io/chroma-core/chroma:latest
+    image: ghcr.io/chroma-core/chroma:0.5.23
     environment:
       - ALLOW_RESET=true
       - CHROMA_SERVER_HOST=0.0.0.0
@@ -35,7 +36,7 @@ services:
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,7 +57,7 @@ services:
       - redis_data:/data
     command: redis-server --save 60 1 --loglevel warning --maxmemory 2gb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -67,6 +68,19 @@ services:
         reservations:
           memory: 1G
 
+  neo4j_setup:
+    image: python:3.9-slim
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./scramble/db/neo4j/scripts:/scripts
+    command: >
+      bash -c '
+        pip install neo4j &&
+        python /scripts/apply_schema.py
+      '
+
   ollama:
     image: ollama/ollama
     ports:
@@ -74,7 +88,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      test: [ "CMD", "curl", "-f", "http://localhost:11434/" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -90,7 +104,7 @@ services:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_ORIGINS=http://localhost:11434
       # Platform-specific GPU settings
-      - OLLAMA_DEVICE=${OLLAMA_DEVICE:-cpu}  # Set to 'mps' for Mac, 'cuda' for NVIDIA, 'rocm' for AMD
+      - OLLAMA_DEVICE=${OLLAMA_DEVICE:-cpu} # Set to 'mps' for Mac, 'cuda' for NVIDIA, 'rocm' for AMD
     # Optional platform-specific device mounts (commented by default)
     # devices:
     #   - /dev/nvidia0:/dev/nvidia0  # For NVIDIA GPUs
@@ -99,17 +113,24 @@ services:
     # privileged: true               # Uncomment for GPU access on some platforms
 
 volumes:
-  neo4j_data:     # Graph relationships
-  neo4j_logs:     # Operation logs
-  chroma_data:    # Vector embeddings
-  redis_data:     # Quick access storage
-  ollama_data:    # Local AI models
+  neo4j_data:
+    # Graph relationships
+    name: scramble_neo4j_data
+    driver: local
+  neo4j_logs:
+    # Operation logs
+    name: scramble_neo4j_logs
+    driver: local
+  chroma_data: # Vector embeddings
+  redis_data: # Quick access storage
+  ollama_data:
+    # Local AI models
 
-# Platform-specific notes:
-# - For Mac with Apple Silicon: Set OLLAMA_DEVICE=mps in .env
-# - For Linux with NVIDIA: Set OLLAMA_DEVICE=cuda and uncomment nvidia device mounts
-# - For Linux with AMD: Set OLLAMA_DEVICE=rocm and uncomment AMD device mounts
-# - For Windows/Other: Leave OLLAMA_DEVICE=cpu or configure based on available hardware
-#
-# Memory settings are generous but can be adjusted based on available system resources
-# Your brain is safe in this bag! 🧠💼
+    # Platform-specific notes:
+    # - For Mac with Apple Silicon: Set OLLAMA_DEVICE=mps in .env
+    # - For Linux with NVIDIA: Set OLLAMA_DEVICE=cuda and uncomment nvidia device mounts
+    # - For Linux with AMD: Set OLLAMA_DEVICE=rocm and uncomment AMD device mounts
+    # - For Windows/Other: Leave OLLAMA_DEVICE=cpu or configure based on available hardware
+    #
+    # Memory settings are generous but can be adjusted based on available system resources
+    # Your brain is safe in this bag! 🧠💼

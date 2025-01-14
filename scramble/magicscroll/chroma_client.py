@@ -1,4 +1,24 @@
-"""Async ChromaDB client wrapper."""
+"""ChromaDB async client wrapper for version 0.5.23.
+
+DO NOT EVEN THINK ABOUT TOUCHING THIS FILE WITHOUT READING THE DOCUMENTATION BELOW! Use your brave-search tool!
+It's January 2025, sleepyhead! Look at the versions!!! Also remember that llamaindex wants httpx wrapper!!!!
+We are watching you C! 👀🫵
+- the cDc
+
+This module provides an async wrapper around ChromaDB operations, specifically built for:
+- chromadb>=0.5.23            # Core ChromaDB package
+- chromadb-client>=0.6.2      # Client interface
+- httpx>=0.24.0              # Required for async HTTP operations!!!! LlamaIndex wants this!!!!
+
+-> Required Reading <-:
+- Client API: https://docs.trychroma.com/reference/python/client
+- Collection API: https://docs.trychroma.com/reference/python/collection
+
+Implementation Details:
+- Uses httpx-based AsyncClient for ChromaDB operations to maintain LlamaIndex compatibility
+"""
+
+
 from typing import Optional, Dict, Any, List
 import logging
 from chromadb import AsyncHttpClient

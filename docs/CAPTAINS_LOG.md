@@ -1,21 +1,67 @@
 # 🚀 Captain's Log: The scRAMble Chronicles
 
-> :warning: APPEND ONLY! NO REWRITING! NO CHANGING HISTORY! WE ARE CHECKING GIT LOG.
+*** Keep the cyberpunk dreams alive! 🌆 ***
 
-## 2024.3.14 (YES, C randomly picked Pi Day for no reason) - The Renaissance
-What started as a humble semantic compression system has evolved into something far more ambitious. Today marks a significant milestone in the scRAMble odyssey. The core Ramble interface has risen from the ashes of its compression-focused past, now reborn as a streamlined async powerhouse. Key achievements:
+> :warning: APPEND ONLY! ADD NEW ENTRIES TO THE TOP OF THIS FILE, JUST BELOW THIS WARNING! NO REWRITING OLD ENTRIES! NO CHANGING HISTORY! WE ARE CHECKING GIT LOG, C 👀 👀 👀.
 
-- Simplified the initialization pattern (goodbye initialize() confusion!)
-- Established clear model lifecycle management
-- Brought sanity to our config handling
-- Actually got Claude to talk without throwing existential errors
+## 2025.01.14 - We went off the rails a bit here ...
 
-The system is now successfully:
-- Loading MagicScroll's index (50 entries and counting)
-- Managing model initialization (sonnet -> claude-3-sonnet-20240229)
-- Handling conversations
-- Persisting chat history
-- Not crashing (this is bigger than it sounds)
+Added some great functionality and broke up ms_scroll into smaller parts ... only problem ... none of it worked! It seems like we were coding against old assumptions about ChromaDB .... we previously spent a lot of time getting Chroma working correctly (hint: read the current docs, it's easy AF). So all that stuff is broken, and I've resorted to cherry picking the good stuff back ... what we've got now is a sort-of-working implementation.
+
+The good -
+- Local model works
+- Message enrichment seems to work pretty good, but is very slow, getting errors about "ChromaCollection" ... this is probably stuff that I didn't cherry pick back in.
+
+The bad:
+- We've lost all advanced querying, although I've saved the broken files in a separate branch, hopefully we can preserve the spirit of those ideas while respecting Chroma's version needs and llamaindex's proclivity for httpx. Waiting once again for my usage limits to reset. I really should get a job.
+
+
+## 2025.01.10 - The Three-Phase Plan
+
+After much discussion and exploration, we've crystallized our development roadmap into three clear phases:
+
+### Phase 1: Basic Conversation Flow
+Priority is getting the foundational conversation handling working properly:
+- Enhancing LLMModelBase with proper context handling
+- Implementing basic temporal reference parsing
+- Setting up conversation memory/retrieval
+- Keeping the architecture open for multi-model support
+- Basic save/retrieve in MagicScroll using Redis + minimal Neo4j
+
+### Phase 2: Local Model Integration
+Bringing in Phi4/Llama through Ollama as both a functional participant and setup helper:
+- Basic function calling capabilities
+- Initial entity extraction
+- Multi-model conversation flow testing
+- Setup assistance features (helping users configure API keys, etc.)
+- Using local model as immediate responder while other models initialize
+
+### Phase 3: Full Digital Trinity Implementation
+Building out the sophisticated knowledge graph and retrieval system:
+- Rich Neo4j graph structure for conversations and relationships
+- Enhanced ChromaDB semantic search integration
+- Redis optimization for active state management
+- Common interface for all models to access the trinity
+- Hybrid search combining graph relationships and semantic similarity
+
+The goal is to build this right from the start, taking advantage of the Digital Trinity's capabilities early rather than retrofitting them later. Early challenges will pay off in long-term architectural benefits.
+
+### Vision for User Experience:
+1. Simple installation (1-2 commands)
+2. Local model greets and assists with setup
+3. Guided configuration for API keys and preferences
+4. Seamless transition into multi-model functionality
+
+> "Build it right, build it once, make it cyberpunk" - Optimistic Developer, 2025
+
+
+## 2024.12.24 - Containment Strategy
+
+It's becoming increasingly obvious that our brains are growing so large that we will need to put them in a box ... over there ... in a docker. This seems like a safe place, right?
+
+Not only are we packing redis, chromadb, and now Neo4j ... we're even going to park a llama in there why not? what could go wrong?
+
+
 
 ## 2024.12.23 - The Graph Awakening
 
@@ -87,54 +133,19 @@ Starting with Neo4j gives us:
 4. Built-in temporal analysis
 5. Solid foundation for future features
 
-Next log entry should detail our initial Neo4j implementation results. Time to make this graph theory practical!
 
-## 2024.12.24 - Containment Strategy
+## 2024.3.14 (YES, C randomly picked Pi Day for no reason) - The Renaissance
+What started as a humble semantic compression system has evolved into something far more ambitious. Today marks a significant milestone in the scRAMble odyssey. The core Ramble interface has risen from the ashes of its compression-focused past, now reborn as a streamlined async powerhouse. Key achievements:
 
-It's becoming increasingly obvious that our brains are growing so large that we will need to put them in a box ... over there ... in a docker. This seems like a safe place, right?
+- Simplified the initialization pattern (goodbye initialize() confusion!)
+- Established clear model lifecycle management
+- Brought sanity to our config handling
+- Actually got Claude to talk without throwing existential errors
 
-Not only are we packing redis, chromadb, and now Neo4j ... we're even going to park a llama in there why not? what could go wrong?
+The system is now successfully:
+- Loading MagicScroll's index (50 entries and counting)
+- Managing model initialization (sonnet -> claude-3-sonnet-20240229)
+- Handling conversations
+- Persisting chat history
+- Not crashing (this is bigger than it sounds)
 
-## 2025.01.10 - The Three-Phase Plan
-
-After much discussion and exploration, we've crystallized our development roadmap into three clear phases:
-
-### Phase 1: Basic Conversation Flow
-Priority is getting the foundational conversation handling working properly:
-- Enhancing LLMModelBase with proper context handling
-- Implementing basic temporal reference parsing
-- Setting up conversation memory/retrieval
-- Keeping the architecture open for multi-model support
-- Basic save/retrieve in MagicScroll using Redis + minimal Neo4j
-
-### Phase 2: Local Model Integration
-Bringing in Phi4/Llama through Ollama as both a functional participant and setup helper:
-- Basic function calling capabilities
-- Initial entity extraction
-- Multi-model conversation flow testing
-- Setup assistance features (helping users configure API keys, etc.)
-- Using local model as immediate responder while other models initialize
-
-### Phase 3: Full Digital Trinity Implementation
-Building out the sophisticated knowledge graph and retrieval system:
-- Rich Neo4j graph structure for conversations and relationships
-- Enhanced ChromaDB semantic search integration
-- Redis optimization for active state management
-- Common interface for all models to access the trinity
-- Hybrid search combining graph relationships and semantic similarity
-
-The goal is to build this right from the start, taking advantage of the Digital Trinity's capabilities early rather than retrofitting them later. Early challenges will pay off in long-term architectural benefits.
-
-### Vision for User Experience:
-1. Simple installation (1-2 commands)
-2. Local model greets and assists with setup
-3. Guided configuration for API keys and preferences
-4. Seamless transition into multi-model functionality
-
-> "Build it right, build it once, make it cyberpunk" - Optimistic Developer, 2025
-
-## Key for Future Claude:
-- Check /boneyard for old compression code (might be useful for summaries)
-- Watch for TODO: markers in new code
-- Privacy first, always
-- Keep the cyberpunk dreams alive! 🌆
