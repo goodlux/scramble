@@ -45,7 +45,6 @@ class InterfaceBase(ABC):
             await self.display_output("Welcome to Scramble!")
             
             while not self._shutdown_requested:
-                await self.display_output(f"[{datetime.now().strftime('%H:%M')}] > ")
                 user_input = await self.get_input()
                 
                 if user_input.lower() in ['exit', 'quit', ':q']:
@@ -87,6 +86,11 @@ class InterfaceBase(ABC):
     async def get_input(self) -> str:
         """Get input from user."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def display_model_output(self, content: str, model_name: str) -> None:
+        """Display model output with speaker indicator."""
+        raise NotImplementedError
     
     @abstractmethod
     async def clear(self) -> None:
@@ -106,11 +110,11 @@ class InterfaceBase(ABC):
                     case 'add':
                         if len(command) > 1:
                             await self.coordinator.add_model_to_conversation(command[1])
-                            await self.display_output(f"system> {command[1]} was added to the conversation")
+                            await self.display_model_output(f"{command[1]} was added to the conversation", "system")
                     case 'remove':
                         if len(command) > 1:
                             await self.coordinator.remove_model_from_conversation(command[1])
-                            await self.display_output(f"system> {command[1]} was removed from the conversation")
+                            await self.display_model_output(f"{command[1]} was removed from the conversation", "system")
                     case _:
                         pass  # Handle unknown commands
                 return
@@ -119,10 +123,7 @@ class InterfaceBase(ABC):
             response = await self.coordinator.process_message(user_input)
             if response and response.get("response"):
                 model_name = response.get("model", "system")
-                if model_name == "system":
-                    await self.display_output(f"system> {response['response']}")
-                else:
-                    await self.display_output(response["response"])
+                await self.display_model_output(response["response"], model_name)
                 
         except Exception as e:
             await self.display_error(f"Error processing input: {e}")

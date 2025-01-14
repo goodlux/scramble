@@ -123,6 +123,28 @@ classDiagram
    await coordinator.process_with_local("Your input here")
    ```
 
+## Version Dependencies 🔒
+
+### ChromaDB
+This project requires specific versions of ChromaDB components:
+
+```yaml
+# Docker container
+chroma:
+  image: ghcr.io/chroma-core/chroma:0.5.23  # Must match Python package version
+
+# Python packages (in pyproject.toml)
+dependencies = [
+    "chromadb>=0.5.23",          # Core ChromaDB package
+    "chromadb-client>=0.6.2",    # Client interface
+]
+```
+
+**⚠️ WARNING: Using older versions will break functionality!**
+- The embedding function interface changed significantly in 0.5.x
+- Client API patterns are different between major versions
+- Vector store operations depend on version compatibility
+
 ## Important Notes
 
 1. **Memory Management**

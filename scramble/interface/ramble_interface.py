@@ -48,6 +48,8 @@ class RambleInterface(InterfaceBase):
 
     def format_model_prompt(self, model_name: str) -> str:
         """Format prompt for model responses."""
+        if model_name == "system":
+            return "[bold red]system[/bold red]> "
         color = "green" if model_name == "granite" else "blue"  # Different colors for different models
         return f"[bold {color}]{model_name}[/bold {color}]> "
 

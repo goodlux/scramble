@@ -5,7 +5,7 @@ services:
   neo4j:
     image: neo4j:5.15.0
     environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-scR4Mble#Graph!}
+      - NEO4J_AUTH=none
       - NEO4J_PLUGINS=["graph-data-science", "apoc"]
       # Memory settings for Neo4j
       - NEO4J_server_memory_heap_initial__size=512m
@@ -18,14 +18,16 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - ./scramble/db/neo4j/schema:/import
+      - ./scramble/db/neo4j/scripts:/scripts
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+
   chroma:
-    image: ghcr.io/chroma-core/chroma:latest
+    image: ghcr.io/chroma-core/chroma:0.5.23
     environment:
       - ALLOW_RESET=true
       - CHROMA_SERVER_HOST=0.0.0.0
@@ -67,6 +69,19 @@ services:
         reservations:
           memory: 1G
 
+  neo4j_setup:
+    image: python:3.9-slim
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./scramble/db/neo4j/scripts:/scripts
+    command: >
+      bash -c '
+        pip install neo4j &&
+        python /scripts/apply_schema.py
+      '
+
   ollama:
     image: ollama/ollama
     ports:
@@ -100,7 +115,11 @@ services:
 
 volumes:
   neo4j_data:     # Graph relationships
+    name: scramble_neo4j_data
+    driver: local
   neo4j_logs:     # Operation logs
+    name: scramble_neo4j_logs
+    driver: local
   chroma_data:    # Vector embeddings
   redis_data:     # Quick access storage
   ollama_data:    # Local AI models

@@ -1,63 +1,53 @@
-# Hi next Claude! 👋
+# Claude's Development Notes
 
-## Recent Progress: Core Architecture Solidified
+## Current Status
+The project is undergoing a significant refactor of the ChromaDB implementation. We discovered that our current implementation has become overly complex and may not properly integrate with LlamaIndex's expectations.
 
-We've established and cleaned up the core conversation architecture:
+## Known Issues
+1. ChromaDB client implementation needs complete revision
+   - Current implementation is over-engineered
+   - May conflict with LlamaIndex requirements
+   - Too many abstraction layers
+   - Complex error handling may be unnecessary
 
-### Key Components:
-1. **Coordinator as Central Hub**
-   - All interactions flow through Coordinator
-   - Clean separation of responsibilities
-   - Single source of truth for system state
-   - Handles MagicScroll interactions
+2. Need to verify:
+   - Correct ChromaDB client usage
+   - LlamaIndex integration requirements
+   - Proper async implementation
 
-2. **Model Management**
-   - Models handle only their specific communication tasks
-   - No direct access to MagicScroll or other components
-   - Clean model addition/removal system
-   - Support for multiple active models
+## Working Components to Preserve
+- Neo4j integration
+- Entity extraction
+- Message enrichment
+- Redis implementation
+- Basic search functionality
 
-3. **Conversation Flow**
-   - Model addressing with @ syntax
-   - Inter-model communication
-   - Proper speaker indicators
-   - Enhanced prompt handling
+## Next Steps
+1. Document current implementation (completed)
+2. Reset ChromaDB implementation
+3. Rebuild with focus on:
+   - Correct ChromaDB client usage
+   - LlamaIndex compatibility
+   - Minimal necessary abstraction
+   - Proper async patterns
+   - Efficient error handling
 
-4. **Interface Improvements**
-   - Color-coded speaker indicators
-   - Improved visual feedback
-   - Clear conversation structure
-   - Custom model personalities
+## Development Guidelines
+1. Maintain clean separation of concerns
+2. Focus on minimal, necessary abstractions
+3. Ensure compatibility with LlamaIndex
+4. Prioritize reliability over feature completeness
+5. Document assumptions and dependencies clearly
 
-### Current Status:
-- Using Granite (granite3.1-dense:2b) as primary model
-- Working model addition ("@granite add sonnet")
-- Proper conversation routing
-- Basic personality system via system prompts
+## Important Links
+- ChromaDB Documentation: https://docs.trychroma.com/
+- LlamaIndex Documentation: https://gpt-index.readthedocs.io/
+- Neo4j Python Driver: https://neo4j.com/docs/python-manual/current/
+- Redis Python Client: https://redis.readthedocs.io/
 
-### Next Focus Areas:
-1. **Conversation Dynamics**
-   - Enhance inter-model interactions
-   - Improve context awareness
-   - Better handling of model roles
-   - More natural conversation flow
-
-2. **Model Personalities**
-   - Refine system prompts
-   - Better role definition
-   - Consistent character traits
-   - Improved interaction patterns
-
-3. **System Architecture**
-   - Monitor Coordinator complexity
-   - Enhance error handling
-   - Improve conversation saving
-   - Add more robust testing
-
-### Development Philosophy:
-- Keep Coordinator as the central hub
-- Maintain clean component separation
-- Focus on conversation quality
-- Build for extensibility
-
-Keep building the cyberpunk dream! 🌆
+## Notes for Future Development
+- Consider breaking complex components into smaller, focused modules
+- Maintain thorough documentation of dependencies and version requirements
+- Keep track of successful patterns for reuse
+- Test integration points thoroughly
+- Document API changes and migration paths
