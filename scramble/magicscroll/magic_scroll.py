@@ -43,7 +43,7 @@ class MagicScroll:
         self._neo4j_driver: Optional[AsyncDriver] = None
         self._redis_client: Optional[aioredis.Redis] = None
         self._chroma_client: Optional[AsyncChromaClient] = None
-        self.collection: Optional[ChromaCollection] = None
+        self._collection: Optional[ChromaCollection] = None
         
         # Core components
         self.index: Optional[MSIndexBase] = None

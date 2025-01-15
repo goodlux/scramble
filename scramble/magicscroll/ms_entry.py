@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, Any, Optional, Union
 import uuid
+from neo4j.graph import Node
 
 class EntryType(Enum):
     """Types of entries that can be stored in the MagicScroll."""
@@ -83,6 +84,37 @@ class MSEntry:
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
             parent_id=data.get("parent_id")  # Use get() to handle missing parent_id
+        )
+
+    @classmethod
+    def from_neo4j(cls, node: Node) -> 'MSEntry':
+        """Create entry from Neo4j node."""
+        # Extract node properties
+        props = dict(node)
+        
+        # Convert Neo4j datetime to Python datetime
+        created_at = props.get('created_at')
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        
+        updated_at = props.get('updated_at')
+        if isinstance(updated_at, str):
+            updated_at = datetime.fromisoformat(updated_at)
+
+        # Extract metadata
+        metadata = {}
+        for key, value in props.items():
+            if key not in ['id', 'content', 'type', 'created_at', 'updated_at', 'parent_id']:
+                metadata[key] = value
+
+        return cls(
+            id=props['id'],
+            content=props['content'],
+            entry_type=EntryType(props['type']),
+            metadata=metadata,
+            created_at=created_at or datetime.utcnow(),
+            updated_at=updated_at or datetime.utcnow(),
+            parent_id=props.get('parent_id')
         )
 
 class MSConversation(MSEntry):

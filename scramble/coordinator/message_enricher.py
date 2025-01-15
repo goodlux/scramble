@@ -138,6 +138,45 @@ class MessageEnricher:
         try:
             seen_contents = set()  # Avoid duplicate content
             
+            # First try specific topic searches using the index
+            for topic in topics:
+                if not self.magic_scroll.index:
+                    continue
+
+                results = await self.magic_scroll.index.search(
+                    query=topic,
+                    limit=2
+                )
+                
+                for result in results:
+                    if result["entry"].content not in seen_contents:
+                        context.topic_discussions.append({
+                            'timestamp': result["entry"].created_at.isoformat(),
+                            'content': result["entry"].content,
+                            'relevance': result["score"],
+                            'matched_topic': topic
+                        })
+                        seen_contents.add(result["entry"].content)
+            
+            # If we didn't find enough with specific topics, try the full message
+            if len(context.topic_discussions) < 2 and self.magic_scroll.index:
+                results = await self.magic_scroll.index.search(
+                    query=message,
+                    limit=3 - len(context.topic_discussions)
+                )
+                
+                for result in results:
+                    if result["entry"].content not in seen_contents:
+                        context.topic_discussions.append({
+                            'timestamp': result["entry"].created_at.isoformat(),
+                            'content': result["entry"].content,
+                            'relevance': result["score"],
+                            'matched_topic': 'message context'
+                        })
+                        seen_contents.add(result["entry"].content)
+
+            """
+            # Original ChromaDB direct collection code, commented out
             # First try specific topic searches
             for topic in topics:
                 results = await self.magic_scroll.search(
@@ -171,6 +210,7 @@ class MessageEnricher:
                             'matched_topic': 'message context'
                         })
                         seen_contents.add(result.content)
+            """
                 
         except Exception as e:
             logger.error(f"Error adding topic context: {e}")
