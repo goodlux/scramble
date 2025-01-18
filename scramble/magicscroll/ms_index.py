@@ -1,109 +1,58 @@
-"""LlamaIndex implementation for MagicScroll."""
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone  
+"""Neo4j and Redis storage implementation for MagicScroll using LlamaIndex."""
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import List, Dict, Any, Optional, cast
+from typing import List, Dict, Any, Optional, Union, cast
 import json
+from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession, Query
+from typing_extensions import LiteralString
 from scramble.utils.logging import get_logger
 
 # LlamaIndex core imports
 from llama_index.core import (
-    VectorStoreIndex,
-    Document,
-    StorageContext,
     Settings,
-    load_index_from_storage,
+    Document,
+    StorageContext
 )
-
-# Database imports
+from llama_index.core.indices.property_graph import PropertyGraphIndex 
+from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.storage.docstore.redis import RedisDocumentStore
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.core.vector_stores import VectorStoreQuery
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 # Local imports
 from scramble.config import Config
 from .ms_entry import MSEntry, EntryType
-from .chroma_client import AsyncChromaClient, ChromaCollection
 
 logger = get_logger(__name__)
 
-class MSIndexBase(ABC):
-    """Abstract base class for MagicScroll indices."""
-    
-    @abstractmethod
-    async def add_entry(self, entry: MSEntry) -> bool:
-        """Add an entry to the index."""
-        pass
-    
-    @abstractmethod
-    async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
-        """Get a specific entry by ID."""
-        pass
-    
-    @abstractmethod
-    async def delete_entry(self, entry_id: str) -> bool:
-        """Delete an entry by ID."""
-        pass
-    
-    @abstractmethod
-    async def search(self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5,
-        min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Search for entries."""
-        pass
-    
-    @abstractmethod
-    async def get_recent(self,
-        hours: Optional[int] = None,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 10
-    ) -> List[MSEntry]:
-        """Get recent entries."""
-        pass
-    
-    @abstractmethod
-    async def get_chain(self, entry_id: str) -> List[MSEntry]:
-        """Get chain of entries connected by parent_id."""
-        pass
+def literal_query(text: str) -> Query:
+    """Create a Query object from a string, casting to LiteralString."""
+    return Query(cast(LiteralString, text))
 
-class LlamaIndexImpl(MSIndexBase):
-    """LlamaIndex implementation of MagicScroll index."""
+class MSIndex:
+    """LlamaIndex implementation for MagicScroll using Neo4j and Redis."""
 
     def __init__(self):
         """Initialize basic attributes."""
         self.config = Config()
         self.storage_path: Optional[Path] = None
-        self.vector_store: Optional[ChromaVectorStore] = None
+        self.graph_store: Optional[Neo4jPropertyGraphStore] = None
         self.doc_store: Optional[RedisDocumentStore] = None
         self.storage_context: Optional[StorageContext] = None
-        self.index: Optional[VectorStoreIndex] = None
+        self.index: Optional[PropertyGraphIndex] = None
+        self.neo4j_driver: Optional[AsyncDriver] = None
 
     @classmethod
-    async def create(cls, chroma_client: AsyncChromaClient, collection: ChromaCollection) -> 'LlamaIndexImpl':
+    async def create(cls, neo4j_url: str, auth: tuple[str, str]) -> 'MSIndex':
         """Factory method to create and initialize index."""
         instance = cls()
         
         try:
-            # Set up storage path
+            # Set up storage path for any local caching
             instance.storage_path = Path.home() / '.scramble' / 'magicscroll'
             instance.storage_path.mkdir(parents=True, exist_ok=True)
             
-            # Initialize vector store
-            instance.vector_store = ChromaVectorStore(chroma_collection=collection)
-            
-            # Initialize Redis document store
-            instance.doc_store = RedisDocumentStore.from_host_and_port(
-                host=instance.config.REDIS_HOST,
-                port=instance.config.REDIS_PORT,
-                namespace='scramble'
-            )
-            
-            # Initialize embedding model and settings
+            # Initialize embedding model
             Settings.embed_model = HuggingFaceEmbedding(
                 model_name="BAAI/bge-large-en-v1.5",
                 embed_batch_size=32
@@ -112,58 +61,73 @@ class LlamaIndexImpl(MSIndexBase):
                 chunk_size=512,
                 chunk_overlap=50
             )
-            Settings.llm = None  # Disable LLM usage
+            Settings.llm = None  # Explicitly disable LLM usage
             
-            # Initialize storage context
+            # Initialize Redis document store
+            instance.doc_store = RedisDocumentStore.from_host_and_port(
+                host=instance.config.REDIS_HOST,
+                port=instance.config.REDIS_PORT,
+                namespace='magicscroll'
+            )
+            
+            # Initialize Neo4j property graph store
+            instance.graph_store = Neo4jPropertyGraphStore(
+                url=neo4j_url,
+                username=auth[0],
+                password=auth[1],
+                database="neo4j"  # default database
+            )
+            
+            # Create direct Neo4j driver for raw queries if needed
+            instance.neo4j_driver = AsyncGraphDatabase.driver(
+                neo4j_url,
+                auth=auth
+            )
+            
+            # Test Neo4j connection
+            async with instance.neo4j_driver.session() as session:
+                await session.run(literal_query("RETURN 1"))
+            
+            # Create storage context
             instance.storage_context = StorageContext.from_defaults(
-                vector_store=instance.vector_store,
                 docstore=instance.doc_store,
+                property_graph_store=instance.graph_store,
                 persist_dir=str(instance.storage_path)
             )
             
-            # Load or create index
-            try:
-                loaded_index = load_index_from_storage(
-                    storage_context=instance.storage_context,
-                    persist_dir=str(instance.storage_path)
-                )
-                if isinstance(loaded_index, VectorStoreIndex):
-                    instance.index = loaded_index
-                else:
-                    instance.index = cast(VectorStoreIndex, loaded_index)
-                logger.info("Loaded existing index")
-                
-            except Exception:
-                instance.index = VectorStoreIndex(
-                    [],
-                    storage_context=instance.storage_context,
-                    show_progress=True
-                )
-                logger.info("Created new index")
+            # Initialize Property Graph Index with storage context
+            instance.index = PropertyGraphIndex(
+                storage_context=instance.storage_context,
+                show_progress=True
+            )
             
+            logger.info("Initialized Neo4j Property Graph Index with Redis document store")
             return instance
             
         except Exception as e:
-            logger.error(f"Error initializing LlamaIndex: {e}")
+            logger.error(f"Error initializing MSIndex: {e}")
             raise
 
     async def add_entry(self, entry: MSEntry) -> bool:
-        """Add an entry to the index."""
+        """Add an entry to both document store and graph index."""
         try:
             if not self.index or not self.storage_context:
                 return False
 
-            # Create LlamaIndex document
+            # Create LlamaIndex document with metadata
             doc = Document(
                 text=entry.content,
-                doc_id=entry.id,
-                extra_info=MSEntry.sanitize_metadata_for_chroma(entry.to_dict())
+                metadata=entry.to_dict(),
+                doc_id=entry.id
             )
             
-            # Add to index
-            self.index.insert(doc)
-            self.storage_context.persist(str(self.storage_path))
+            # Store document
+            self.storage_context.docstore.add_documents([doc])
             
+            # Add to property graph index
+            self.index.insert(doc)
+            
+            logger.debug(f"Added entry {entry.id} to document store and graph index")
             return True
             
         except Exception as e:
@@ -176,19 +140,24 @@ class LlamaIndexImpl(MSIndexBase):
         limit: int = 5,
         min_score: float = 0.0
     ) -> List[Dict[str, Any]]:
-        """Search for entries using vector store."""
+        """Search using both vector similarity and graph structure."""
         try:
             if not self.index:
                 return []
             
-            # Create vector store query
-            vector_store_query = VectorStoreQuery(
-                query_str=query,
-                similarity_top_k=limit  # Get number of requested results
+            # Build metadata filters
+            metadata_filters = {}
+            if entry_types:
+                metadata_filters["type"] = {"$in": [t.value for t in entry_types]}
+            
+            # Create retriever with both vector and graph components
+            retriever = self.index.as_retriever(
+                similarity_top_k=limit,
+                metadata_filters=metadata_filters
             )
             
-            # Get response
-            response = await self.index.as_retriever().aretrieve(query)
+            # Execute search
+            response = retriever.retrieve(query)
             
             results = []
             for node in response:
@@ -215,28 +184,35 @@ class LlamaIndexImpl(MSIndexBase):
             return []
 
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
-        """Get a specific entry."""
+        """Get an entry from the document store."""
         try:
             if not self.storage_context:
                 return None
                 
+            # Get document from store
             doc = self.storage_context.docstore.get_document(entry_id)
-            if doc and isinstance(doc.metadata, dict):
-                return MSEntry.from_dict(doc.metadata)
+            if not doc or not isinstance(doc.metadata, dict):
+                return None
+                
+            return MSEntry.from_dict(doc.metadata)
                 
         except Exception as e:
             logger.error(f"Error getting entry {entry_id}: {e}")
-            
-        return None
+            return None
 
     async def delete_entry(self, entry_id: str) -> bool:
-        """Delete an entry."""
+        """Delete an entry from both stores."""
         try:
             if not self.index or not self.storage_context:
                 return False
                 
+            # Delete from property graph
             self.index.delete_ref_doc(entry_id)
-            self.storage_context.persist(str(self.storage_path))
+            
+            # Delete from document store
+            self.storage_context.docstore.delete_document(entry_id)
+            
+            logger.debug(f"Deleted entry {entry_id} from both stores")
             return True
             
         except Exception as e:
@@ -248,68 +224,90 @@ class LlamaIndexImpl(MSIndexBase):
         entry_types: Optional[List[EntryType]] = None,
         limit: int = 10
     ) -> List[MSEntry]:
-        """Get recent entries."""
+        """Get recent entries using Neo4j temporal queries."""
         try:
-            if not self.storage_context:
+            if not self.neo4j_driver:
                 return []
-                
-            matching_docs = []
-            cutoff = None
+
+            query_parts = ["MATCH (n:Entry)"]
+            params: Dict[str, Any] = {}
             
             if hours is not None:
-                cutoff = datetime.now(timezone.utc).timestamp() - (hours * 3600)
+                query_parts.append("WHERE n.created_at >= datetime($cutoff)")
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+                params["cutoff"] = cutoff.isoformat()
                 
-            # Get all docs and filter
-            for doc_id in self.storage_context.docstore.docs:
-                doc = self.storage_context.docstore.get_document(doc_id)
-                if doc is None or not isinstance(doc.metadata, dict):
-                    continue
-                    
-                # Apply time filter
-                if cutoff:
-                    created_at = datetime.fromisoformat(doc.metadata.get("created_at", ""))
-                    if created_at.timestamp() < cutoff:
-                        continue
-                        
-                # Apply type filter
                 if entry_types:
-                    doc_type = doc.metadata.get("type")
-                    if not doc_type or doc_type not in [t.value for t in entry_types]:
+                    query_parts.append("AND n.type IN $types")
+                    params["types"] = [t.value for t in entry_types]
+            elif entry_types:
+                query_parts.append("WHERE n.type IN $types")
+                params["types"] = [t.value for t in entry_types]
+            
+            query_parts.extend([
+                "RETURN n",
+                "ORDER BY n.created_at DESC",
+                "LIMIT $limit"
+            ])
+            
+            params["limit"] = limit
+            
+            async with self.neo4j_driver.session() as session:
+                result = await session.run(
+                    literal_query(" ".join(query_parts)), 
+                    params
+                )
+                
+                entries = []
+                async for record in result:
+                    try:
+                        entries.append(MSEntry.from_neo4j(record["n"]))
+                    except Exception as e:
+                        logger.error(f"Error converting node to entry: {e}")
                         continue
-                        
-                matching_docs.append(doc)
-            
-            # Sort by creation time
-            matching_docs.sort(
-                key=lambda x: datetime.fromisoformat(x.metadata["created_at"]),
-                reverse=True
-            )
-            
-            return [MSEntry.from_dict(doc.metadata) for doc in matching_docs[:limit]]
+                
+                return entries
             
         except Exception as e:
             logger.error(f"Error getting recent entries: {e}")
             return []
 
     async def get_chain(self, entry_id: str) -> List[MSEntry]:
-        """Get chain of entries connected by parent_id."""
+        """Get chain of entries using Neo4j path queries."""
         try:
-            chain = []
-            current_id = entry_id
-            visited = set()
-            
-            while current_id and current_id not in visited:
-                visited.add(current_id)
-                entry = await self.get_entry(current_id)
+            if not self.neo4j_driver:
+                return []
                 
-                if not entry:
-                    break
-                    
-                chain.append(entry)
-                current_id = entry.parent_id
-            
-            return list(reversed(chain))
+            async with self.neo4j_driver.session() as session:
+                result = await session.run(
+                    literal_query("""
+                    MATCH path = (start:Entry {id: $id})-[:CONTINUES*]->(end:Entry)
+                    UNWIND nodes(path) as n
+                    RETURN DISTINCT n
+                    ORDER BY n.created_at ASC
+                    """),
+                    {"id": entry_id}
+                )
+                
+                entries = []
+                async for record in result:
+                    try:
+                        entries.append(MSEntry.from_neo4j(record["n"]))
+                    except Exception as e:
+                        logger.error(f"Error converting node to entry: {e}")
+                        continue
+                
+                return entries
             
         except Exception as e:
             logger.error(f"Error getting entry chain for {entry_id}: {e}")
             return []
+
+    async def close(self):
+        """Clean up resources."""
+        if self.neo4j_driver:
+            await self.neo4j_driver.close()
+        
+        # Persist storage context if needed
+        if self.storage_context:
+            self.storage_context.persist(persist_dir=str(self.storage_path))

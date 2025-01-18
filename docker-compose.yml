@@ -3,7 +3,7 @@ version: '3.8'
 # Cross-platform configuration for the Digital Trinity + Local AI
 services:
   neo4j:
-    image: neo4j:5.15.0
+    image: neo4j:5.26.0
     environment:
       - NEO4J_AUTH=none
       - NEO4J_PLUGINS=["graph-data-science", "apoc"]
@@ -26,7 +26,7 @@ services:
       retries: 5
 
   chroma:
-    image: ghcr.io/chroma-core/chroma:0.5.23
+    image: ghcr.io/chroma-core/chroma:0.4.24
     environment:
       - ALLOW_RESET=true
       - CHROMA_SERVER_HOST=0.0.0.0

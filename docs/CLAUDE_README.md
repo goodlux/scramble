@@ -1,67 +1,34 @@
-# ChromaDB Integration Notes
+# LlamaIndex Integration Plan
 
-## The Problem
+## Background
+We're updating MagicScroll to use LlamaIndex's document store and property graph store capabilities properly. The initial work on ms_index.py is complete - it now correctly uses:
 
-We encountered significant confusion and debugging difficulties due to having multiple paths to ChromaDB:
+- RedisDocumentStore for document storage 
+- Neo4jPropertyGraphStore for property graph operations
+- StorageContext to coordinate between them
 
-1. Direct ChromaDB access through our custom AsyncChromaClient (`scramble/magicscroll/chroma_client.py`)
-2. LlamaIndex's ChromaVectorStore implementation in MSIndexBase abstraction (`scramble/magicscroll/ms_index.py`)
+## Files To Update
 
-This dual approach caused:
-- Typing errors
-- Debugging difficulties
-- Unclear data flow
-- Potential race conditions
+### /scramble/magicscroll/ms_store.py
+- Replace direct Redis operations with LlamaIndex's RedisDocumentStore
+- Update interface to match LlamaIndex document store patterns
+- Ensure proper transaction and batch operation support
+- Consider removal if functionality fully handled by LlamaIndex's RedisDocumentStore
 
-## Key Files Involved
+### /scramble/magicscroll/ms_entry.py  
+- Review and update entry types to work smoothly with LlamaIndex Document objects
+- Ensure metadata handling aligns with LlamaIndex patterns
+- Update any ChromaDB-specific code (like sanitize_metadata_for_chroma) to be storage-agnostic
+- Consider adding helper methods for LlamaIndex document conversion
 
-- `/scramble/magicscroll/ms_index.py` - Contains unnecessary MSIndexBase abstraction and LlamaIndexImpl
-- `/scramble/magicscroll/chroma_client.py` - Redundant ChromaDB client implementation
-- `/scramble/magicscroll/magic_scroll.py` - Main coordination class using both approaches
-- `/scramble/coordinator/message_enricher.py` - Uses ChromaDB for context lookups
+## Implementation Notes
+- Keep our strong typing and data validation
+- Maintain backwards compatibility where possible
+- Consider phasing out ms_store.py if RedisDocumentStore covers all needs
+- Ensure proper error handling and logging remain robust
+- Keep Neo4j-specific methods for complex graph operations
 
-## The Solution
+## Files Already Updated
+- /scramble/magicscroll/ms_index.py - Now properly uses LlamaIndex stores and StorageContext
 
-After investigation, we discovered that LlamaIndex's ChromaDB integration (via ChromaVectorStore) can handle all our needs:
-
-```python
-vector_store = ChromaVectorStore.from_params(
-    host="localhost",
-    port=8000,
-    collection_name="quickstart"
-)
-```
-
-### Required Changes
-
-1. Rewrite `ms_index.py`:
-   - Remove MSIndexBase abstraction
-   - Create a single class for ChromaDB operations using LlamaIndex's interface
-   - Use ChromaVectorStore.from_params() for initialization
-   - Document clear data flow patterns
-
-2. Remove `chroma_client.py`:
-   - All ChromaDB operations should go through LlamaIndex
-   
-3. Update `message_enricher.py`:
-   - Modify to use new ms_index.py implementation
-   - Ensure all context lookups go through LlamaIndex interface
-
-4. Update `magic_scroll.py`:
-   - Remove direct ChromaDB client references
-   - Use new ms_index.py implementation
-
-### Next Steps
-
-1. Implement these changes to establish a clear, single path to ChromaDB
-2. This will create a solid foundation for implementing Neo4j integration
-3. Neo4j operations will complement (not compete with) the vector search functionality
-
-## Notes for Implementation
-
-- Search operations MUST go through LlamaIndex's interface
-- Neo4j can enhance search results but won't replace vector search
-- Keep ChromaDB operations focused on vector similarity search
-- Use Neo4j for relationship traversal and graph operations
-
-This refactor will significantly simplify our architecture and make debugging easier by establishing clear boundaries between vector search (ChromaDB/LlamaIndex) and graph operations (Neo4j).
+This migration will give us better integration with LlamaIndex's ecosytem while maintaining our app-specific functionality.

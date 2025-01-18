@@ -24,15 +24,11 @@ dependencies = [
     "textual",
     "pyte",
     "redis>=5.0.1",
-    "chromadb>=0.5.23",
-    "chromadb-client>=0.6.2",
-    "llama-index-core>=0.10.0",
-    "llama-index-embeddings-huggingface>=0.1.0",
-    "llama-index-vector-stores-chroma>=0.1.0",
-    "llama-index-storage-docstore-redis>=0.1.0",
-    "llama-index-storage-index-store-redis>=0.1.0",
+    "llama-index-core",  # Updated for latest Neo4j support
+    "llama-index-storage-docstore-redis",
+    "llama-index-graph-stores-neo4j", # Neo4j graph store
     "duckdb",
-    "neo4j==5.15.0",
+    "neo4j==5.26.0",
     "httpx>=0.26.0",
     "fastapi>=0.109.0",
     "ollama>=0.1.6",
@@ -40,7 +36,7 @@ dependencies = [
     "torch",
     "types-redis",
     "pytest",
-    "aiofiles"
+    "aiofiles",
 ]
 
 [project.scripts]
