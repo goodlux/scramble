@@ -18,7 +18,6 @@ class Config:
     # Digital Trinity Settings - Shared Infrastructure
     NEO4J_HOST: str = os.getenv("NEO4J_HOST", "localhost")
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
-    CHROMA_HOST: str = os.getenv("CHROMA_HOST", "localhost")
     
     # Neo4j settings
     NEO4J_URI: str = f"bolt://{NEO4J_HOST}:7687"
@@ -28,9 +27,6 @@ class Config:
     # Redis settings
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    
-    # ChromaDB settings
-    CHROMA_PORT: int = 8000
     
     # Mock LLM settings
     DISABLE_MOCK_LLM: bool = bool(os.getenv("DISABLE_MOCK_LLM", "true"))

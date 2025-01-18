@@ -22,6 +22,72 @@ class MSEntry:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert entry to dictionary format."""
+        return {
+            "id": self.id,
+            "content": self.content,
+            "type": self.entry_type.value,
+            "created_at": self.created_at.isoformat(),
+            **self.metadata
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'MSEntry':
+        """Create entry from dictionary format."""
+        # Convert created_at from ISO string to datetime
+        created_at = data.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        else:
+            created_at = datetime.utcnow()
+
+        # Extract core fields
+        entry_type = data.get("type", "conversation")
+        
+        # Extract metadata (excluding core fields)
+        metadata = {k: v for k, v in data.items() 
+                if k not in ['id', 'content', 'type', 'created_at']}
+
+        return cls(
+            id=data["id"],
+            content=data["content"],
+            entry_type=EntryType(entry_type),
+            metadata=metadata,
+            created_at=created_at
+        )
+
+    @classmethod 
+    def from_neo4j(cls, node: Any) -> 'MSEntry':
+        """Create entry from Neo4j node.
+        
+        Note: The node parameter is typed as Any to avoid circular imports,
+        but it should be a neo4j.graph.Node.
+        """
+        props = dict(node)
+        
+        # Convert Neo4j datetime to Python datetime
+        created_at = props.get('created_at')
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        else:
+            created_at = datetime.utcnow()
+            
+        # Get entry type, default to conversation
+        entry_type = props.get('type', 'conversation')
+
+        # Extract metadata (all props except the core ones)
+        metadata = {k: v for k, v in props.items() 
+                   if k not in ['id', 'content', 'type', 'created_at']}
+
+        return cls(
+            id=props['id'],
+            content=props['content'],
+            entry_type=EntryType(entry_type),
+            metadata=metadata,
+            created_at=created_at
+        )
     
     def to_document(self) -> Document:
         """Convert entry to LlamaIndex Document for storage/indexing."""

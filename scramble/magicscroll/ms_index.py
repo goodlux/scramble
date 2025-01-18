@@ -1,20 +1,15 @@
 """Neo4j and Redis storage implementation for MagicScroll using LlamaIndex."""
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, cast
-import json
 from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession, Query
 from typing_extensions import LiteralString
 from scramble.utils.logging import get_logger
 
 # LlamaIndex core imports
-from llama_index.core import (
-    Settings,
-    Document,
-    StorageContext
-)
+from llama_index.core import Settings, Document, StorageContext, ServiceContext
 from llama_index.core.indices.property_graph import PropertyGraphIndex 
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
+from llama_index.core.graph_stores.types import ChunkNode, LabelledNode
 from llama_index.storage.docstore.redis import RedisDocumentStore
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -22,6 +17,7 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 # Local imports
 from scramble.config import Config
 from .ms_entry import MSEntry, EntryType
+from .ms_search import SearchResult 
 
 logger = get_logger(__name__)
 
@@ -35,7 +31,6 @@ class MSIndex:
     def __init__(self):
         """Initialize basic attributes."""
         self.config = Config()
-        self.storage_path: Optional[Path] = None
         self.graph_store: Optional[Neo4jPropertyGraphStore] = None
         self.doc_store: Optional[RedisDocumentStore] = None
         self.storage_context: Optional[StorageContext] = None
@@ -48,10 +43,6 @@ class MSIndex:
         instance = cls()
         
         try:
-            # Set up storage path for any local caching
-            instance.storage_path = Path.home() / '.scramble' / 'magicscroll'
-            instance.storage_path.mkdir(parents=True, exist_ok=True)
-            
             # Initialize embedding model
             Settings.embed_model = HuggingFaceEmbedding(
                 model_name="BAAI/bge-large-en-v1.5",
@@ -78,7 +69,7 @@ class MSIndex:
                 database="neo4j"  # default database
             )
             
-            # Create direct Neo4j driver for raw queries if needed
+            # Create direct Neo4j driver for raw queries if needed  
             instance.neo4j_driver = AsyncGraphDatabase.driver(
                 neo4j_url,
                 auth=auth
@@ -92,12 +83,19 @@ class MSIndex:
             instance.storage_context = StorageContext.from_defaults(
                 docstore=instance.doc_store,
                 property_graph_store=instance.graph_store,
-                persist_dir=str(instance.storage_path)
             )
             
-            # Initialize Property Graph Index with storage context
+            # Create service context
+            service_context = ServiceContext.from_defaults(
+                llm=None,  # No LLM needed
+                embed_model=Settings.embed_model,
+                node_parser=Settings.node_parser,
+            )
+            
+            # Initialize Property Graph Index
             instance.index = PropertyGraphIndex(
                 storage_context=instance.storage_context,
+                service_context=service_context,  # Add this
                 show_progress=True
             )
             
@@ -114,74 +112,39 @@ class MSIndex:
             if not self.index or not self.storage_context:
                 return False
 
-            # Create LlamaIndex document with metadata
+            # Create LlamaIndex document
             doc = Document(
                 text=entry.content,
                 metadata=entry.to_dict(),
-                doc_id=entry.id
+                doc_id=entry.id,
+                embedding=None  # Let LlamaIndex handle embedding
             )
             
-            # Store document
+            # Store document using storage context
             self.storage_context.docstore.add_documents([doc])
             
-            # Add to property graph index
+            # Add to property graph index - this handles both vector and graph storage
             self.index.insert(doc)
             
-            logger.debug(f"Added entry {entry.id} to document store and graph index")
+            # Ensure document is indexed in Neo4j
+            if self.graph_store:
+                # Convert to LabelledNode for Neo4j property graph
+                node = ChunkNode(
+                    text=entry.content,
+                    id_=entry.id,
+                    properties=entry.to_dict(),
+                    label="Entry"  # or we could use entry.entry_type.value
+                )
+                await self.graph_store.aupsert_nodes([node])
+            
+            logger.debug(f"Added entry {entry.id} to all stores")
             return True
             
         except Exception as e:
             logger.error(f"Error adding entry: {e}")
             return False
+            
 
-    async def search(self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5,
-        min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Search using both vector similarity and graph structure."""
-        try:
-            if not self.index:
-                return []
-            
-            # Build metadata filters
-            metadata_filters = {}
-            if entry_types:
-                metadata_filters["type"] = {"$in": [t.value for t in entry_types]}
-            
-            # Create retriever with both vector and graph components
-            retriever = self.index.as_retriever(
-                similarity_top_k=limit,
-                metadata_filters=metadata_filters
-            )
-            
-            # Execute search
-            response = retriever.retrieve(query)
-            
-            results = []
-            for node in response:
-                if hasattr(node, 'score') and node.score < min_score:
-                    continue
-                    
-                if not node.metadata:
-                    continue
-                    
-                try:
-                    entry = MSEntry.from_dict(node.metadata)
-                    results.append({
-                        "entry": entry,
-                        "score": getattr(node, 'score', 1.0)
-                    })
-                except Exception as e:
-                    logger.error(f"Error processing node metadata: {e}")
-                    continue
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error searching index: {e}")
-            return []
 
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
         """Get an entry from the document store."""
@@ -189,12 +152,19 @@ class MSIndex:
             if not self.storage_context:
                 return None
                 
-            # Get document from store
+            # Try docstore first
             doc = self.storage_context.docstore.get_document(entry_id)
-            if not doc or not isinstance(doc.metadata, dict):
-                return None
+            if doc and isinstance(doc.metadata, dict):
+                return MSEntry.from_dict(doc.metadata)
+
+            # Fallback to graph store
+            if self.graph_store:
+                # Use get with id filter
+                nodes = await self.graph_store.aget(ids=[entry_id])
+                if nodes and len(nodes) > 0:
+                    return MSEntry.from_dict(nodes[0].properties)
                 
-            return MSEntry.from_dict(doc.metadata)
+            return None
                 
         except Exception as e:
             logger.error(f"Error getting entry {entry_id}: {e}")
@@ -302,12 +272,63 @@ class MSIndex:
         except Exception as e:
             logger.error(f"Error getting entry chain for {entry_id}: {e}")
             return []
+        
+
+    async def search(
+        self,
+        query: str,
+        entry_types: Optional[List[EntryType]] = None,
+        limit: int = 5,
+        min_score: float = 0.0
+    ) -> List[SearchResult]:
+        """Search using both vector similarity and graph structure."""
+        try:
+            if not self.index:
+                return []
+            
+            # Build metadata filters
+            metadata_filters = {}
+            if entry_types:
+                metadata_filters["type"] = {"$in": [t.value for t in entry_types]}
+            
+            # Create retriever with both vector and graph components
+            retriever = self.index.as_retriever(
+                similarity_top_k=limit,
+                metadata_filters=metadata_filters
+            )
+            
+            # Execute search
+            response = retriever.retrieve(query)
+            
+            results: List[SearchResult] = []
+            for node in response:
+                if hasattr(node, 'score') and node.score < min_score:
+                    continue
+                    
+                if not node.metadata:
+                    continue
+                    
+                try:
+                    entry = MSEntry.from_dict(node.metadata)
+                    results.append(SearchResult(
+                        entry=entry,
+                        score=getattr(node, 'score', 1.0),
+                        source='hybrid',  # Using both vector and graph
+                        related_entries=[], # Can populate from graph if needed
+                        context={'score': getattr(node, 'score', 1.0)}
+                    ))
+                except Exception as e:
+                    logger.error(f"Error processing node metadata: {e}")
+                    continue
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error searching index: {e}")
+            return []
+
 
     async def close(self):
         """Clean up resources."""
         if self.neo4j_driver:
             await self.neo4j_driver.close()
-        
-        # Persist storage context if needed
-        if self.storage_context:
-            self.storage_context.persist(persist_dir=str(self.storage_path))
