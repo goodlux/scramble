@@ -5,7 +5,7 @@ from datetime import datetime
 # Local imports
 from .ms_entry import MSEntry, EntryType
 from .ms_index import MSIndex
-from .ms_search import SearchResult
+from .ms_search import MSSearch, SearchResult
 from scramble.utils.logging import get_logger
 from scramble.config import Config
 
@@ -15,6 +15,7 @@ class MagicScroll:
     def __init__(self, config: Config):
         """Initialize with config."""
         self.index: MSIndex  # No Optional - will be set in create()
+        self.searcher: MSSearch  # No Optional - will be set in create()
         self.config = config
 
     @classmethod 
@@ -26,18 +27,23 @@ class MagicScroll:
         return magicscroll
     
     async def initialize(self) -> None:
-        """Initialize the index."""
+        """Initialize the components."""
         try:
+            # Initialize index
             self.index = await MSIndex.create(
                 self.config.NEO4J_URI,
                 auth=(self.config.NEO4J_USER, self.config.NEO4J_PASSWORD)
             )
+            
+            # Initialize searcher with reference to MagicScroll
+            self.searcher = MSSearch(self)
+            
             logger.info("MagicScroll ready to roll!")
         except Exception as e:
             logger.error(f"Failed to initialize MagicScroll: {str(e)}")
             raise RuntimeError(f"Failed to initialize: {str(e)}")
 
-    async def write(
+    async def write_conversation(
         self,
         content: Union[str, Dict[str, Any]],
         entry_type: EntryType = EntryType.CONVERSATION,
@@ -58,8 +64,6 @@ class MagicScroll:
     async def read(self, entry_id: str) -> Optional[MSEntry]:
         """Read an entry from the scroll."""
         return await self.index.get_entry(entry_id)
-            
-  
 
     async def search(
         self,
@@ -69,12 +73,25 @@ class MagicScroll:
         limit: int = 5
     ) -> List[SearchResult]:
         """Search entries in the scroll."""
-        return await self.index.search(
+        return await self.searcher.search(
             query=query,
             entry_types=entry_types,
+            temporal_filter=temporal_filter,
             limit=limit
         )
 
+    async def search_conversation(
+        self,
+        message: str,
+        temporal_filter: Optional[Dict[str, datetime]] = None,
+        limit: int = 3
+    ) -> List[SearchResult]:
+        """Search for conversation context."""
+        return await self.searcher.conversation_context_search(
+            message=message,
+            temporal_filter=temporal_filter,
+            limit=limit
+        )
 
     async def get_recent(
         self,

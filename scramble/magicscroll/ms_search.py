@@ -1,9 +1,13 @@
 """Search functionality for MagicScroll using Neo4j and Redis."""
-from typing import Dict, List, Any, Optional, Set, Union
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass
-from neo4j import AsyncGraphDatabase, AsyncDriver
-from neo4j.exceptions import Neo4jError
+
+from llama_index.core.schema import NodeWithScore, QueryBundle
+from llama_index.core.indices.property_graph.retriever import PGRetriever
+from llama_index.core.indices.property_graph.sub_retrievers.vector import VectorContextRetriever 
+from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters, FilterOperator
+
 from .ms_entry import MSEntry, EntryType
 from scramble.utils.logging import get_logger
 
@@ -18,7 +22,7 @@ class SearchResult:
     related_entries: List[MSEntry]
     context: Dict[str, Any]
 
-class MSSearcher:
+class MSSearch:
     """Handles search operations across Neo4j and Redis."""
     
     def __init__(self, magic_scroll):
@@ -32,46 +36,71 @@ class MSSearcher:
         temporal_filter: Optional[Dict[str, datetime]] = None,
         limit: int = 5
     ) -> List[SearchResult]:
-        """Main search interface combining graph and vector similarity."""
+        """Main search interface combining vector and temporal search."""
         try:
-            results: Dict[str, List[SearchResult]] = {
-                'vector': [],   # Embedding-based similarity
-                'graph': [],    # Graph traversal results
-                'temporal': []  # Time-based results
-            }
-            
-            # Perform vector similarity search using Neo4j embeddings
+            results: List[SearchResult] = []
+
+            # Build vector retriever using LlamaIndex's async features
             if self.ms.index:
-                vector_results = await self._vector_search(
-                    query=query,
-                    entry_types=entry_types,
-                    limit=limit
+                # Build metadata filters
+                metadata_filter = None
+                if entry_types:
+                    metadata_filter = MetadataFilters(
+                        filters=[
+                            MetadataFilter(
+                                key="type",
+                                value=[t.value for t in entry_types],
+                                operator=FilterOperator.IN
+                            )
+                        ]
+                    )
+
+                # Create vector retriever
+                vector_retriever = VectorContextRetriever(
+                    graph_store=self.ms.graph_store,
+                    embed_model=self.ms.index._embed_model,
+                    similarity_top_k=limit,
+                    include_text=True,
+                    path_depth=1,  # Start with direct relationships
+                    filters=metadata_filter,
                 )
-                results['vector'].extend(vector_results)
-            
-            # Perform graph-based search
-            if self.ms.graph_manager:
-                graph_results = await self._graph_search(
-                    search_text=query,
-                    entry_types=entry_types,
-                    temporal_filter=temporal_filter,
-                    limit=limit
+
+                # Build property graph retriever with async support 
+                retriever = PGRetriever(
+                    sub_retrievers=[vector_retriever],
+                    use_async=True,
+                    num_workers=4  # Adjust based on needs
                 )
-                results['graph'].extend(graph_results)
+
+                # Create query bundle and execute async search
+                query_bundle = QueryBundle(query_str=query)
+                nodes = await retriever._aretrieve(query_bundle)
+                
+                # Convert to search results
+                for node in nodes:
+                    if isinstance(node, NodeWithScore) and node.metadata:
+                        entry = MSEntry.from_dict(node.metadata)
+                        results.append(SearchResult(
+                            entry=entry,
+                            score=node.score or 1.0,
+                            source='hybrid',
+                            related_entries=[],  # Could populate from relationships
+                            context={'score': node.score}
+                        ))
             
-            # Get temporal context if needed
-            if temporal_filter and self.ms.doc_store:
+            # Add temporal context if needed
+            if temporal_filter:
                 temporal_results = await self._temporal_search(
                     query=query,
                     temporal_filter=temporal_filter,
                     entry_types=entry_types,
                     limit=limit
                 )
-                results['temporal'].extend(temporal_results)
-            
-            # Merge and rank results
-            merged = await self._merge_results(results, limit)
-            return merged
+                results.extend(temporal_results)
+
+            # Sort all results by score
+            results.sort(key=lambda x: x.score, reverse=True)
+            return results[:limit]
             
         except Exception as e:
             logger.error(f"Search failed: {e}")
@@ -83,195 +112,40 @@ class MSSearcher:
         temporal_filter: Optional[Dict[str, datetime]] = None,
         limit: int = 3
     ) -> List[SearchResult]:
-        """Search optimized for finding conversation context."""
+        """
+        Search optimized for finding conversation context.
+        Uses direct graph traversal for thread finding.
+        """
         try:
             if not self.ms.graph_manager:
                 return []
-                
-            # First try to find direct conversation references
-            cypher_query = """
-            // Find conversations that might be referenced
-            MATCH (e:Entry)
-            WHERE e.type = 'conversation'
-            AND e.content CONTAINS $search_text
             
-            // Find conversation threads
-            OPTIONAL MATCH thread = (e)-[:CONTINUES*1..3]-(related:Entry)
-            
-            // Apply temporal filter
-            WHERE (
-                $start IS NULL OR e.created_at >= datetime($start)
-            ) AND (
-                $end IS NULL OR e.created_at <= datetime($end)
+            # Find related entries through graph traversal
+            related = await self.ms.graph_manager.get_conversation_thread(
+                entry_id=message,
+                max_depth=3
             )
-            
-            // Return with thread context
-            RETURN e,
-                   collect(DISTINCT related) as thread_entries
-            ORDER BY e.created_at DESC
-            LIMIT $limit
-            """
-            
-            async with self.ms._neo4j_driver.session() as session:
-                results = await session.run(
-                    cypher_query,
-                    search_text=message,
-                    start=temporal_filter['start'].isoformat() if temporal_filter and 'start' in temporal_filter else None,
-                    end=temporal_filter['end'].isoformat() if temporal_filter and 'end' in temporal_filter else None,
-                    limit=limit
+
+            if related:
+                thread_result = SearchResult(
+                    entry=related[0],  # Most recent message
+                    score=1.0,  # Direct thread match
+                    source='graph',
+                    related_entries=related[1:],  # Rest of thread
+                    context={'type': 'conversation_thread'}
                 )
-                
-                search_results = []
-                async for record in results:
-                    entry = MSEntry.from_neo4j(record['e'])
-                    thread = [MSEntry.from_neo4j(t) for t in record['thread_entries'] if t]
-                    
-                    search_results.append(SearchResult(
-                        entry=entry,
-                        score=1.0,  # Direct conversation matches get high score
-                        source='graph',
-                        related_entries=thread,
-                        context={'type': 'conversation_thread'}
-                    ))
-                    
-                if search_results:
-                    return search_results
-            
-            # If no direct matches, fall back to regular search
+                return [thread_result]
+
+            # Fallback to general search if no direct thread found
             return await self.search(
                 query=message,
                 temporal_filter=temporal_filter,
-                entry_types=[EntryType.CONVERSATION],
+                entry_types=[EntryType.CONVERSATION],  
                 limit=limit
             )
-            
+
         except Exception as e:
             logger.error(f"Error in conversation context search: {e}")
-            return []
-
-    async def _vector_search(
-        self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5
-    ) -> List[SearchResult]:
-        """Perform vector similarity search using Neo4j embeddings."""
-        try:
-            if not self.ms.index:
-                return []
-                
-            # Get query embedding from index
-            query_embedding = await self.ms.index.get_embedding(query)
-            
-            # Search Neo4j using vector similarity
-            cypher_query = """
-            CALL db.index.vector.queryNodes('document_embeddings', $k, $embedding)
-            YIELD node, score
-            WHERE ($types IS NULL OR node.type IN $types)
-            RETURN node, score, 
-                   [(node)-[:MENTIONS]->(e:Entity) | e] as entities,
-                   [(node)-[:CONTINUES*1..2]-(r:Entry) | r] as related
-            """
-            
-            async with self.ms._neo4j_driver.session() as session:
-                results = await session.run(
-                    cypher_query,
-                    embedding=query_embedding,
-                    k=limit,
-                    types=[t.value for t in entry_types] if entry_types else None
-                )
-                
-                search_results = []
-                async for record in results:
-                    entry = MSEntry.from_neo4j(record['node'])
-                    related = [MSEntry.from_neo4j(r) for r in record['related']]
-                    entities = [e['name'] for e in record['entities']]
-                    
-                    search_results.append(SearchResult(
-                        entry=entry,
-                        score=float(record['score']),
-                        source='vector',
-                        related_entries=related,
-                        context={'entities': entities}
-                    ))
-                    
-                return search_results
-                
-        except Exception as e:
-            logger.error(f"Error in vector search: {e}")
-            return []
-
-    async def _graph_search(
-        self,
-        search_text: str,
-        entry_types: Optional[List[EntryType]],
-        temporal_filter: Optional[Dict[str, datetime]],
-        limit: int
-    ) -> List[SearchResult]:
-        """Perform graph-based search using Neo4j."""
-        try:
-            if not self.ms.graph_manager:
-                return []
-                
-            # Build type filter
-            type_filter = ""
-            if entry_types:
-                type_filter = "AND e.type IN $types"
-            
-            cypher_query = f"""
-            MATCH (e:Entry)
-            WHERE e.content CONTAINS $search_text
-            {type_filter}
-            
-            // Find related entries through entity mentions
-            OPTIONAL MATCH (e)-[:MENTIONS]->(entity:Entity)
-                <-[:MENTIONS]-(related:Entry)
-            
-            // Apply temporal filter
-            WHERE (
-                $start IS NULL OR e.created_at >= datetime($start)
-            ) AND (
-                $end IS NULL OR e.created_at <= datetime($end)
-            )
-            
-            RETURN e,
-                   collect(DISTINCT entity) as entities,
-                   collect(DISTINCT related) as related_entries
-            LIMIT $limit
-            """
-            
-            async with self.ms._neo4j_driver.session() as session:
-                results = await session.run(
-                    cypher_query,
-                    search_text=search_text,
-                    types=[t.value for t in entry_types] if entry_types else None,
-                    start=temporal_filter['start'].isoformat() if temporal_filter and 'start' in temporal_filter else None,
-                    end=temporal_filter['end'].isoformat() if temporal_filter and 'end' in temporal_filter else None,
-                    limit=limit
-                )
-                
-                search_results = []
-                async for record in results:
-                    entry = MSEntry.from_neo4j(record['e'])
-                    related = [MSEntry.from_neo4j(e) for e in record['related_entries'] if e]
-                    entities = [e['name'] for e in record['entities'] if e]
-                    
-                    # Score based on number of connections
-                    connections = len(related) + len(entities)
-                    score = min(0.9, 0.5 + (connections * 0.1))
-                    
-                    search_results.append(SearchResult(
-                        entry=entry,
-                        score=score,
-                        source='graph',
-                        related_entries=related,
-                        context={'entities': entities}
-                    ))
-                    
-                return search_results
-                
-        except Exception as e:
-            logger.error(f"Error in graph search: {e}")
             return []
 
     async def _temporal_search(
@@ -328,37 +202,3 @@ class MSSearcher:
         except Exception as e:
             logger.error(f"Error in temporal search: {e}")
             return []
-
-    async def _merge_results(
-        self,
-        results: Dict[str, List[SearchResult]],
-        limit: int
-    ) -> List[SearchResult]:
-        """Merge and rank results from different sources."""
-        merged = []
-        seen_ids = set()
-        
-        # Scoring weights for different sources
-        weights = {
-            'vector': 1.0,    # Embedding similarity gets highest weight
-            'graph': 0.8,     # Graph connections second
-            'temporal': 0.6   # Temporal matches lowest
-        }
-        
-        # Helper to add result if not seen
-        def add_result(result: SearchResult):
-            if result.entry.id not in seen_ids:
-                # Adjust score based on source
-                result.score *= weights.get(result.source, 0.5)
-                merged.append(result)
-                seen_ids.add(result.entry.id)
-                logger.debug(f"Added {result.source} result {result.entry.id} with score {result.score}")
-        
-        # Add results in priority order
-        for source in ['vector', 'graph', 'temporal']:
-            for result in results.get(source, []):
-                add_result(result)
-        
-        # Sort by score and limit
-        merged.sort(key=lambda x: x.score, reverse=True)
-        return merged[:limit]
