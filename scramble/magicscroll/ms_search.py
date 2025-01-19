@@ -9,6 +9,7 @@ from llama_index.core.indices.property_graph.sub_retrievers.vector import Vector
 from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters, FilterOperator
 
 from .ms_entry import MSEntry, EntryType
+from .ms_index import MSIndex
 from scramble.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -21,14 +22,14 @@ class SearchResult:
     source: str  # 'graph', 'temporal', 'vector', 'hybrid'
     related_entries: List[MSEntry]
     context: Dict[str, Any]
-
+        
 class MSSearch:
     """Handles search operations across Neo4j and Redis."""
     
-    def __init__(self, magic_scroll):
-        """Initialize with reference to main MagicScroll instance."""
-        self.ms = magic_scroll
-        
+    def __init__(self, index: 'MSIndex'):
+        """Initialize with reference to MSIndex."""
+        self.index = index  # This provides access to graph_store and doc_store
+
     async def search(
         self,
         query: str,
@@ -41,7 +42,7 @@ class MSSearch:
             results: List[SearchResult] = []
 
             # Build vector retriever using LlamaIndex's async features
-            if self.ms.index:
+            if self.index.graph_store and self.index.embed_model:
                 # Build metadata filters
                 metadata_filter = None
                 if entry_types:
@@ -57,19 +58,18 @@ class MSSearch:
 
                 # Create vector retriever
                 vector_retriever = VectorContextRetriever(
-                    graph_store=self.ms.graph_store,
-                    embed_model=self.ms.index._embed_model,
+                    graph_store=self.index.graph_store,
+                    embed_model=self.index.embed_model,
                     similarity_top_k=limit,
                     include_text=True,
                     path_depth=1,  # Start with direct relationships
                     filters=metadata_filter,
                 )
 
-                # Build property graph retriever with async support 
+                # Build property graph retriever with async support
                 retriever = PGRetriever(
                     sub_retrievers=[vector_retriever],
-                    use_async=True,
-                    num_workers=4  # Adjust based on needs
+                    use_async=True
                 )
 
                 # Create query bundle and execute async search
@@ -98,13 +98,14 @@ class MSSearch:
                 )
                 results.extend(temporal_results)
 
-            # Sort all results by score
+            # Sort all results by score and limit
             results.sort(key=lambda x: x.score, reverse=True)
             return results[:limit]
             
         except Exception as e:
             logger.error(f"Search failed: {e}")
             return []
+
 
     async def conversation_context_search(
         self,
@@ -117,11 +118,11 @@ class MSSearch:
         Uses direct graph traversal for thread finding.
         """
         try:
-            if not self.ms.graph_manager:
+            if not self.index.graph_manager:
                 return []
             
             # Find related entries through graph traversal
-            related = await self.ms.graph_manager.get_conversation_thread(
+            related = await self.index.graph_manager.get_conversation_thread(
                 entry_id=message,
                 max_depth=3
             )
@@ -157,16 +158,16 @@ class MSSearch:
     ) -> List[SearchResult]:
         """Search entries by time range using Redis."""
         try:
-            if not self.ms.doc_store:
+            if not self.index.doc_store:
                 return []
                 
             # Get entries within time range
-            timeline_key = f"{self.ms.doc_store.namespace}:timeline"
+            timeline_key = f"{self.index.doc_store.namespace}:timeline"
             start_score = temporal_filter['start'].timestamp() if 'start' in temporal_filter else "-inf"
             end_score = temporal_filter['end'].timestamp() if 'end' in temporal_filter else "+inf"
             
             # Get entries from Redis sorted set
-            entry_ids = await self.ms.doc_store.redis.zrangebyscore(
+            entry_ids = await self.index.doc_store.redis.zrangebyscore(
                 timeline_key,
                 start_score,
                 end_score,
@@ -176,7 +177,7 @@ class MSSearch:
             
             search_results = []
             for entry_id in entry_ids:
-                entry = await self.ms.doc_store.get_entry(entry_id)
+                entry = await self.index.doc_store.get_entry(entry_id)
                 if not entry:
                     continue
                     

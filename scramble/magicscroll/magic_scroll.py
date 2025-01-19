@@ -14,10 +14,9 @@ logger = get_logger(__name__)
 class MagicScroll:
     def __init__(self, config: Config):
         """Initialize with config."""
-        self.index: MSIndex  # No Optional - will be set in create()
-        self.searcher: MSSearch  # No Optional - will be set in create()
+        self.index: Optional[MSIndex] = None  # Will be set in create()
         self.config = config
-
+        
     @classmethod 
     async def create(cls) -> 'MagicScroll':
         """Create a new MagicScroll using global config."""
@@ -29,14 +28,11 @@ class MagicScroll:
     async def initialize(self) -> None:
         """Initialize the components."""
         try:
-            # Initialize index
+            # Initialize index which handles both storage and search
             self.index = await MSIndex.create(
                 self.config.NEO4J_URI,
                 auth=(self.config.NEO4J_USER, self.config.NEO4J_PASSWORD)
             )
-            
-            # Initialize searcher with reference to MagicScroll
-            self.searcher = MSSearch(self)
             
             logger.info("MagicScroll ready to roll!")
         except Exception as e:
@@ -45,24 +41,28 @@ class MagicScroll:
 
     async def write_conversation(
         self,
-        content: Union[str, Dict[str, Any]],
-        entry_type: EntryType = EntryType.CONVERSATION,
-        metadata: Optional[Dict[str, Any]] = None,
-        parent_id: Optional[str] = None
+        content: str,
+        metadata: Dict[str, Any]
     ) -> str:
-        """Write an entry to the scroll."""
+        """Write a conversation entry."""
+        if not self.index:
+            raise RuntimeError("Index not initialized")
+            
         entry = MSEntry(
-            content=content if isinstance(content, str) else str(content),
-            entry_type=entry_type,
-            metadata=metadata or {}
+            content=content,
+            entry_type=EntryType.CONVERSATION,
+            metadata=metadata
         )
         
         if not await self.index.add_entry(entry):
             raise RuntimeError("Failed to write entry")
+            
         return entry.id
 
     async def read(self, entry_id: str) -> Optional[MSEntry]:
         """Read an entry from the scroll."""
+        if not self.index:
+            return None
         return await self.index.get_entry(entry_id)
 
     async def search(
@@ -73,7 +73,9 @@ class MagicScroll:
         limit: int = 5
     ) -> List[SearchResult]:
         """Search entries in the scroll."""
-        return await self.searcher.search(
+        if not self.index:
+            return []
+        return await self.index.search(
             query=query,
             entry_types=entry_types,
             temporal_filter=temporal_filter,
@@ -87,7 +89,9 @@ class MagicScroll:
         limit: int = 3
     ) -> List[SearchResult]:
         """Search for conversation context."""
-        return await self.searcher.conversation_context_search(
+        if not self.index:
+            return []
+        return await self.index.search_conversation(
             message=message,
             temporal_filter=temporal_filter,
             limit=limit
@@ -101,8 +105,7 @@ class MagicScroll:
     ) -> List[MSEntry]:
         """Get recent entries."""
         if not self.index:
-            raise RuntimeError("Scroll not initialized")
-            
+            return []
         return await self.index.get_recent(
             hours=hours,
             entry_types=entry_types,

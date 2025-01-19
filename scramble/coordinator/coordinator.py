@@ -253,8 +253,20 @@ class Coordinator:
                 raise RuntimeError("No active conversation to end")
 
             # Format and save the complete conversation
-            formatted_conv = self.active_conversation.format_conversation_for_storage()
-            metadata = ["conversation"]
+            conv_data = self.active_conversation.format_conversation_for_storage()
+            
+            # Create proper metadata from conversation data
+            metadata = {
+                "type": "conversation",
+                "start_time": conv_data["start_time"],
+                "active_models": conv_data["active_models"],
+                # Add any other useful metadata
+                "message_count": len(conv_data["messages"]),
+                "participants": list({msg["speaker"] for msg in conv_data["messages"]})
+            }
+            
+            # Convert message data to string format for storage
+            content = self.active_conversation.format_conversation()
             
             logger.info("=" * 50)
             logger.info("Saving conversation to MagicScroll...")
@@ -262,7 +274,7 @@ class Coordinator:
             logger.info(f"Messages in conversation: {len(self.active_conversation.messages)}")
             
             entry_id = await self.scroll.write_conversation(
-                content=formatted_conv,
+                content=content,
                 metadata=metadata
             )
             

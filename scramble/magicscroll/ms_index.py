@@ -3,7 +3,6 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional, cast
 from neo4j import AsyncGraphDatabase, AsyncDriver, Query
 from typing_extensions import LiteralString
-from scramble.utils.logging import get_logger
 
 # LlamaIndex core imports
 from llama_index.core import Settings, Document, StorageContext
@@ -15,7 +14,11 @@ from llama_index.storage.docstore.redis import RedisDocumentStore
 
 # Local imports
 from scramble.config import Config
+from scramble.utils.logging import get_logger
 from .ms_entry import MSEntry, EntryType
+from .ms_search import MSSearch, SearchResult
+from .ms_graph import MSGraphManager
+from .ms_store import RedisStore
 
 logger = get_logger(__name__)
 
@@ -24,51 +27,54 @@ def literal_query(text: str) -> Query:
     return Query(cast(LiteralString, text))
 
 class MSIndex:
-    """LlamaIndex implementation for MagicScroll using Neo4j and Redis."""
+    """LlamaIndex implementation for MagicScroll."""
 
     def __init__(self):
         """Initialize basic attributes."""
         self.config = Config()
         self.graph_store: Optional[Neo4jPropertyGraphStore] = None
-        self.doc_store: Optional[RedisDocumentStore] = None
+        self.doc_store: Optional[RedisStore] = None
         self.storage_context: Optional[StorageContext] = None
         self.index: Optional[PropertyGraphIndex] = None
         self.neo4j_driver: Optional[AsyncDriver] = None
-
+        self.searcher: Optional[MSSearch] = None 
+        self.embed_model: Optional[HuggingFaceEmbedding] = None 
+        self.graph_manager: Optional[MSGraphManager] = None
+        
     @classmethod
     async def create(cls, neo4j_url: str, auth: tuple[str, str]) -> 'MSIndex':
         """Factory method to create and initialize index."""
         instance = cls()
         
         try:
-            # Initialize global settings
-            Settings.embed_model = HuggingFaceEmbedding(
+            # Initialize embedding model
+            instance.embed_model = HuggingFaceEmbedding(
                 model_name="BAAI/bge-large-en-v1.5",
                 embed_batch_size=32
             )
-            Settings.node_parser = SentenceSplitter(
-                chunk_size=512,
-                chunk_overlap=50
-            )
-            Settings.llm = None  # Explicitly disable LLM usage
-            
-            # Initialize Redis document store
-            instance.doc_store = RedisDocumentStore.from_host_and_port(
-                host=instance.config.REDIS_HOST,
-                port=instance.config.REDIS_PORT,
-                namespace='magicscroll'
-            )
+
+            Settings.embed_model = instance.embed_model
             
             # Initialize Neo4j property graph store
             instance.graph_store = Neo4jPropertyGraphStore(
                 url=neo4j_url,
                 username=auth[0],
                 password=auth[1],
-                database="neo4j",  # default database
-                ensure_unique_ids=True
+                database="neo4j"  # default database
             )
             
-            # Create direct Neo4j driver for temporal queries
+            # Initialize Redis store
+            instance.doc_store = await RedisStore.create(
+                namespace="magicscroll"  # We can let it handle the client initialization
+            )
+
+            # Initialize storage context with Redis docstore from our store wrapper
+            instance.storage_context = StorageContext.from_defaults(
+                docstore=instance.doc_store.store,  # Use .store to get LlamaIndex's RedisDocumentStore
+                property_graph_store=instance.graph_store
+            )
+            
+            # Initialize direct Neo4j driver for temporal queries
             instance.neo4j_driver = AsyncGraphDatabase.driver(
                 neo4j_url,
                 auth=auth
@@ -78,11 +84,7 @@ class MSIndex:
             async with instance.neo4j_driver.session() as session:
                 await session.run(literal_query("RETURN 1"))
             
-            # Create storage context
-            instance.storage_context = StorageContext.from_defaults(
-                docstore=instance.doc_store,
-                property_graph_store=instance.graph_store
-            )
+
             
             # Initialize Property Graph Index with empty documents
             instance.index = PropertyGraphIndex.from_documents(
@@ -91,6 +93,10 @@ class MSIndex:
                 show_progress=True,
                 embed_kg_nodes=True  # Enable embeddings for vector search
             )
+
+            # Initialize searcher
+            instance.searcher = MSSearch(instance)
+            instance.graph_manager = MSGraphManager(instance.neo4j_driver)
             
             logger.info("Initialized Neo4j Property Graph Index with Redis document store")
             return instance
@@ -123,6 +129,7 @@ class MSIndex:
             logger.error(f"Error adding entry: {e}")
             return False
 
+
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
         """Get an entry from the document store."""
         try:
@@ -146,6 +153,7 @@ class MSIndex:
             logger.error(f"Error getting entry {entry_id}: {e}")
             return None
 
+
     async def delete_entry(self, entry_id: str) -> bool:
         """Delete an entry from both stores."""
         try:
@@ -161,6 +169,7 @@ class MSIndex:
         except Exception as e:
             logger.error(f"Error deleting entry {entry_id}: {e}")
             return False
+
 
     async def get_recent(self,
         hours: Optional[int] = None,
@@ -215,6 +224,7 @@ class MSIndex:
             logger.error(f"Error getting recent entries: {e}")
             return []
 
+
     async def get_chain(self, entry_id: str) -> List[MSEntry]:
         """Get chain of entries using graph traversal."""
         try:
@@ -245,6 +255,42 @@ class MSIndex:
         except Exception as e:
             logger.error(f"Error getting entry chain for {entry_id}: {e}")
             return []
+        
+
+    async def search(
+        self,
+        query: str,
+        entry_types: Optional[List[EntryType]] = None,
+        temporal_filter: Optional[Dict[str, datetime]] = None,
+        limit: int = 5
+    ) -> List[SearchResult]:
+        """Search for entries using vector similarity and filters."""
+        if not self.searcher:
+            return []
+            
+        return await self.searcher.search(
+            query=query,
+            entry_types=entry_types,
+            temporal_filter=temporal_filter,
+            limit=limit
+        )
+
+
+    async def search_conversation(
+        self,
+        message: str,
+        temporal_filter: Optional[Dict[str, datetime]] = None,
+        limit: int = 3
+    ) -> List[SearchResult]:
+        """Search specifically for conversation context."""
+        if not self.searcher:
+            return []
+            
+        return await self.searcher.conversation_context_search(
+            message=message,
+            temporal_filter=temporal_filter,
+            limit=limit
+        )
 
     async def close(self):
         """Clean up resources."""

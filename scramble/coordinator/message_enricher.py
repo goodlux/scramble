@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import re
 from scramble.utils.logging import get_logger
 from scramble.magicscroll.magic_scroll import MagicScroll
+from scramble.magicscroll.ms_entry import EntryType
 from .temporal_processor import TemporalProcessor, TemporalReference
 
 logger = get_logger(__name__)
@@ -47,20 +48,9 @@ class MessageEnricher:
         r"(?:that|the) thing (?:we|you) (?:talked|discussed) about"
     ]
     
-    # Temporal reference helpers
-    TIME_UNITS = {
-        "second": 1,
-        "minute": 60,
-        "hour": 3600,
-        "day": 86400,
-        "week": 604800,
-        "month": 2592000,
-        "year": 31536000
-    }
-    
     def __init__(self, magic_scroll: MagicScroll, temporal_processor: TemporalProcessor):
         """Initialize with required components."""
-        self.magic_scroll = magic_scroll
+        self.scroll = magic_scroll
         self.temporal_processor = temporal_processor
         # Compile regex patterns for efficiency
         self.memory_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.MEMORY_PATTERNS]
@@ -138,80 +128,27 @@ class MessageEnricher:
         try:
             seen_contents = set()  # Avoid duplicate content
             
-            # First try specific topic searches using the index
-            for topic in topics:
-                if not self.magic_scroll.index:
-                    continue
-
-                results = await self.magic_scroll.index.search(
-                    query=topic,
-                    limit=2
-                )
+            # Search through index using topics
+            if not self.scroll.index:
+                return
                 
-                for result in results:
-                    if result["entry"].content not in seen_contents:
-                        context.topic_discussions.append({
-                            'timestamp': result["entry"].created_at.isoformat(),
-                            'content': result["entry"].content,
-                            'relevance': result["score"],
-                            'matched_topic': topic
-                        })
-                        seen_contents.add(result["entry"].content)
+            # Use search through MSIndex
+            results = await self.scroll.index.search(
+                query=message,
+                entry_types=[EntryType.CONVERSATION],
+                limit=3
+            )
             
-            # If we didn't find enough with specific topics, try the full message
-            if len(context.topic_discussions) < 2 and self.magic_scroll.index:
-                results = await self.magic_scroll.index.search(
-                    query=message,
-                    limit=3 - len(context.topic_discussions)
-                )
-                
-                for result in results:
-                    if result["entry"].content not in seen_contents:
-                        context.topic_discussions.append({
-                            'timestamp': result["entry"].created_at.isoformat(),
-                            'content': result["entry"].content,
-                            'relevance': result["score"],
-                            'matched_topic': 'message context'
-                        })
-                        seen_contents.add(result["entry"].content)
-
-            """
-            # Original ChromaDB direct collection code, commented out
-            # First try specific topic searches
-            for topic in topics:
-                results = await self.magic_scroll.search(
-                    query=topic,
-                    limit=2
-                )
-                
-                for result in results:
-                    if result.content not in seen_contents:
-                        context.topic_discussions.append({
-                            'timestamp': result.created_at.isoformat(),
-                            'content': result.content,
-                            'relevance': getattr(result, 'score', 1.0),
-                            'matched_topic': topic
-                        })
-                        seen_contents.add(result.content)
-            
-            # If we didn't find enough with specific topics, try the full message
-            if len(context.topic_discussions) < 2:
-                results = await self.magic_scroll.search(
-                    query=message,
-                    limit=3 - len(context.topic_discussions)
-                )
-                
-                for result in results:
-                    if result.content not in seen_contents:
-                        context.topic_discussions.append({
-                            'timestamp': result.created_at.isoformat(),
-                            'content': result.content,
-                            'relevance': getattr(result, 'score', 1.0),
-                            'matched_topic': 'message context'
-                        })
-                        seen_contents.add(result.content)
-            """
-                
+            for result in results:
+                if result.entry.content not in seen_contents:
+                    context.topic_discussions.append({
+                        'timestamp': result.entry.created_at.isoformat(),
+                        'content': result.entry.content,
+                        'relevance': result.score,
+                        'matched_topic': list(topics)[0] if topics else 'message context'
+                    })
+                    seen_contents.add(result.entry.content)
+                    
         except Exception as e:
             logger.error(f"Error adding topic context: {e}")
     
@@ -232,16 +169,21 @@ class MessageEnricher:
                     'end': ref_time + window
                 }
                 
-                results = await self.magic_scroll.search(
+                if not self.scroll.index:
+                    continue
+                    
+                # Search through index with temporal filter
+                results = await self.scroll.index.search(
                     query="",  # Empty query to match all in timeframe
+                    entry_types=[EntryType.CONVERSATION],
                     temporal_filter=temporal_filter,
                     limit=3
                 )
                 
                 for result in results:
                     context.temporal_context.append({
-                        'timestamp': result.created_at.isoformat(),
-                        'content': result.content,
+                        'timestamp': result.entry.created_at.isoformat(),
+                        'content': result.entry.content,
                         'temporal_ref': ref['original_text']
                     })
                     

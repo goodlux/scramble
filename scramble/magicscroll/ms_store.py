@@ -10,6 +10,7 @@ from .ms_entry import MSEntry
 
 logger = logging.getLogger(__name__)
 
+
 class RedisStore:
     """Redis storage for MagicScroll entries using LlamaIndex RedisDocumentStore."""
     
@@ -18,12 +19,19 @@ class RedisStore:
         namespace: str = "magicscroll",
         redis_client: Optional[Redis] = None,
     ):
+        
         """Initialize store with Redis client."""
         self.namespace = namespace
         self.store = RedisDocumentStore.from_redis_client(
             redis_client=redis_client,
             namespace=namespace
         )
+        self._redis_client: Optional[Redis] = redis_client
+    
+    @property
+    def redis(self) -> Optional[Redis]:
+        """Access to Redis client."""
+        return self._redis_client
 
     @classmethod
     async def create(
