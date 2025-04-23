@@ -23,6 +23,16 @@ class MSEntry:
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    def get_metadata(self) -> Dict[str, Any]:
+        """Get metadata dictionary without content."""
+        return {
+            "id": self.id,
+            "type": self.entry_type.value,
+            "created_at": self.created_at.isoformat(),
+            **self.metadata  # spread any additional metadata
+        }
+
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert entry to dictionary format."""
         return {

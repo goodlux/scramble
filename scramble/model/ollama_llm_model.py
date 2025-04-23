@@ -35,6 +35,16 @@ class OllamaLLMModel(LLMModelBase):
         
     async def _initialize_client(self) -> None:
         """Initialize Ollama client with configuration."""
+        # Check if we're in simulation mode
+        import os
+        simulation_mode = os.environ.get('SIMULATE_MODELS', '0') == '1'
+        
+        if simulation_mode:
+            logger.info(f"Simulation mode: Not connecting to Ollama for {self.model_name}")
+            self.client = "SIMULATED"  # Just set a non-None value
+            self.system_message = self.config.get("system_prompt", "")
+            return
+            
         try:
             # Get base_url from provider config if available
             provider_config = self.config.get("provider_config", {})
@@ -130,6 +140,20 @@ class OllamaLLMModel(LLMModelBase):
 
     async def _generate_completion(self, params: Dict[str, Any]) -> str:
         """Generate a complete response."""
+        # Check if we're in simulation mode
+        import os
+        simulation_mode = os.environ.get('SIMULATE_MODELS', '0') == '1'
+        
+        if simulation_mode:
+            # Generate a simple simulated response
+            prompt = params.get("messages", [])[-1].get("content", "") if params.get("messages") else ""
+            simulated_response = f"[Simulated {self.model_name} Response] Echo: {prompt[:50]}..."
+            logger.info(f"Simulation mode: Generated response for {self.model_name}")
+            
+            # Add to context buffer for conversation continuity
+            self._add_to_context("assistant", simulated_response)
+            return simulated_response
+            
         try:
             if not self.client:
                 raise RuntimeError("Ollama client not initialized")
@@ -138,6 +162,8 @@ class OllamaLLMModel(LLMModelBase):
             if response and response.message:
                 response_text = response.message["content"]
                 logger.debug(f"Generated response: {response_text[:100]}...")  # Log first 100 chars
+                # Add to context buffer for conversation continuity
+                self._add_to_context("assistant", response_text)
                 return response_text
             return ""
             
@@ -147,13 +173,42 @@ class OllamaLLMModel(LLMModelBase):
     
     async def _generate_stream(self, params: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """Generate a streaming response."""
+        # Check if we're in simulation mode
+        import os
+        simulation_mode = os.environ.get('SIMULATE_MODELS', '0') == '1'
+        
+        if simulation_mode:
+            # Generate a simple simulated streaming response
+            prompt = params.get("messages", [])[-1].get("content", "") if params.get("messages") else ""
+            simulated_response = f"[Simulated {self.model_name} Response] Echo: {prompt[:50]}..."
+            
+            # Split into chunks to simulate streaming
+            chunks = [simulated_response[i:i+5] for i in range(0, len(simulated_response), 5)]
+            
+            # Add to context buffer
+            self._add_to_context("assistant", simulated_response)
+            
+            # Yield chunks with small delays
+            import asyncio
+            for chunk in chunks:
+                yield chunk
+                await asyncio.sleep(0.1)  # Simulate typing delay
+            return
+            
         if not self.client:
             raise RuntimeError("Ollama client not initialized")
 
+        full_response = ""
         try:
             async for chunk in await self.client.chat(**params):
                 if chunk and chunk.message and chunk.message.get("content"):
-                    yield chunk.message["content"]
+                    content = chunk.message["content"]
+                    full_response += content
+                    yield content
+                    
+            # Add complete response to context
+            if full_response:
+                self._add_to_context("assistant", full_response)
                     
         except Exception as e:
             logger.error(f"Error in stream generation: {str(e)}")

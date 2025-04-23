@@ -8,17 +8,24 @@ from typing_extensions import LiteralString
 from llama_index.core import Settings, Document, StorageContext
 from llama_index.core.indices.property_graph import PropertyGraphIndex 
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.graph_stores.memgraph import MemgraphPropertyGraphStore
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.storage.docstore.redis import RedisDocumentStore
+from llama_index.core.indices.property_graph import DynamicLLMPathExtractor
+from llama_index.core.indices.property_graph import SimpleLLMPathExtractor
+from llama_index.llms.ollama import Ollama
+from llama_index.core.node_parser import SentenceSplitter 
 
 # Local imports
 from scramble.config import Config
 from scramble.utils.logging import get_logger
 from .ms_entry import MSEntry, EntryType
-from .ms_search import MSSearch, SearchResult
-from .ms_graph import MSGraphManager
-from .ms_store import RedisStore
+from .ms_store import MSStore
+from .ms_types import SearchResult
+from .ms_search import MSSearch
+
+import asyncio
+import functools
 
 logger = get_logger(__name__)
 
@@ -26,109 +33,175 @@ def literal_query(text: str) -> Query:
     """Create a Query object from a string, casting to LiteralString."""
     return Query(cast(LiteralString, text))
 
+
 class MSIndex:
     """LlamaIndex implementation for MagicScroll."""
 
     def __init__(self):
         """Initialize basic attributes."""
         self.config = Config()
-        self.graph_store: Optional[Neo4jPropertyGraphStore] = None
-        self.doc_store: Optional[RedisStore] = None
+        self.doc_store: Optional[MSStore] = None
+        self.graph_store: Optional[MemgraphPropertyGraphStore] = None
         self.storage_context: Optional[StorageContext] = None
         self.index: Optional[PropertyGraphIndex] = None
-        self.neo4j_driver: Optional[AsyncDriver] = None
-        self.searcher: Optional[MSSearch] = None 
         self.embed_model: Optional[HuggingFaceEmbedding] = None 
-        self.graph_manager: Optional[MSGraphManager] = None
+        self.llm: Optional[Ollama] = None
+        
+        Settings.node_parser = SentenceSplitter(
+            chunk_size=1024,  # Increase from default 1024
+            chunk_overlap=50
+        )
         
     @classmethod
-    async def create(cls, neo4j_url: str, auth: tuple[str, str]) -> 'MSIndex':
+    async def create(cls, memgraph_url: str, auth: tuple[str, str]) -> 'MSIndex':
         """Factory method to create and initialize index."""
         instance = cls()
         
         try:
-            # Initialize embedding model
-            instance.embed_model = HuggingFaceEmbedding(
-                model_name="BAAI/bge-large-en-v1.5",
-                embed_batch_size=32
-            )
+           
 
-            Settings.embed_model = instance.embed_model
             
+            logger.info("Configured local Ollama LLM for entity extraction")
+
+            # # Initialize embedding model
+            # instance.embed_model = HuggingFaceEmbedding(
+            #     model_name="BAAI/bge-small-en-v1.5"
+            # )
+            
+            # instance.llm = Ollama(
+            #     model="granite3.1-dense:2b",  # Using granite model
+            #     request_timeout=3600,
+            #     temperature=0.1,
+            #     HuggingFaceEmbedding=HuggingFaceEmbedding(
+            #         model_name="BAAI/bge-small-en-v1.5"
+            #     ) 
+            # )
+
+            # Settings.embed_model = instance.embed_model
+            # Settings.llm = instance.llm
             # Initialize Neo4j property graph store
-            instance.graph_store = Neo4jPropertyGraphStore(
-                url=neo4j_url,
-                username=auth[0],
-                password=auth[1],
-                database="neo4j"  # default database
-            )
-            
-            # Initialize Redis store
-            instance.doc_store = await RedisStore.create(
-                namespace="magicscroll"  # We can let it handle the client initialization
-            )
 
-            # Initialize storage context with Redis docstore from our store wrapper
-            instance.storage_context = StorageContext.from_defaults(
-                docstore=instance.doc_store.store,  # Use .store to get LlamaIndex's RedisDocumentStore
-                property_graph_store=instance.graph_store
-            )
+
+            # # Initialize redis document store before storage context and index.
+            # instance.doc_store = await RedisStore.create(
+            #     namespace="magicscroll"
+            # )
+
+            # # Initialize storage context with Redis docstore from our store wrapper
+            # instance.storage_context = StorageContext.from_defaults(
+            #     docstore=instance.doc_store.store,  # Use .store to get LlamaIndex's RedisDocumentStore
+            #     property_graph_store=instance.graph_store
+            # )
             
+            #Define our graph extraction config
+            # kg_extractor = DynamicLLMPathExtractor(
+            #     llm=llm,
+            #     max_triplets_per_chunk=20,
+            #     allowed_entity_types=[
+            #         # From our updated schema:
+            #         "Message",         # Our new Message type
+            #         "Conversation",    # Container for messages
+            #         "Topic",          # For topic linking
+            #         "Model",          # For model attribution
+            #         "User"            # For user messages
+            #     ],
+            #     allowed_relation_types=[
+            #         # Core message relationships from our schema
+            #         "SENT_BY",           # Message -> User/Model
+            #         "ADDRESSED_TO",      # Message -> User/Model
+            #         "PART_OF",          # Message -> Conversation
+            #         "NEXT_IN_SEQUENCE", # Message -> Message temporal sequence
+            #         "DISCUSSES",        # Message -> Topic
+            #         "REFERENCES"        # Message -> Message/Document/etc
+            #     ],
+            #     num_workers=4,
+            # )
+
+
+
+
+
+
+            # Initialize Property Graph Index with the extractor
+
             # Initialize direct Neo4j driver for temporal queries
-            instance.neo4j_driver = AsyncGraphDatabase.driver(
-                neo4j_url,
-                auth=auth
-            )
+            # instance.neo4j_driver = AsyncGraphDatabase.driver(
+            #     neo4j_url,
+            #     auth=auth
+            # )
             
-            # Test Neo4j connection
-            async with instance.neo4j_driver.session() as session:
-                await session.run(literal_query("RETURN 1"))
+            # # Test Neo4j connection
+            # async with instance.neo4j_driver.session() as session:
+            #     await session.run(literal_query("RETURN 1"))
             
-
-            
-            # Initialize Property Graph Index with empty documents
-            instance.index = PropertyGraphIndex.from_documents(
-                documents=[],  # Initialize empty
-                storage_context=instance.storage_context,
-                show_progress=True,
-                embed_kg_nodes=True  # Enable embeddings for vector search
-            )
-
-            # Initialize searcher
-            instance.searcher = MSSearch(instance)
-            instance.graph_manager = MSGraphManager(instance.neo4j_driver)
-            
-            logger.info("Initialized Neo4j Property Graph Index with Redis document store")
+            logger.info("Initialized Memgraph Property Graph Index with Redis document store")
             return instance
             
         except Exception as e:
             logger.error(f"Error initializing MSIndex: {e}")
             raise
 
-    async def add_entry(self, entry: MSEntry) -> bool:
-        """Add an entry to document store and property graph."""
+    def add_entry(self, entry: MSEntry) -> bool:
+        """Synchronous add entry - called internally."""
         try:
-            if not self.index or not self.storage_context:
-                return False
-
-            # Create LlamaIndex document
-            doc = Document(
-                text=entry.content,
-                metadata=entry.to_dict(),
-                doc_id=entry.id,
-                embedding=None  # Let LlamaIndex handle embedding
+                
+            kg_extractor = DynamicLLMPathExtractor(
+                llm=self.llm,
+                max_triplets_per_chunk=20,
+                num_workers=4,
+                # Let the LLM infer entities and their labels (types) on the fly
+                allowed_entity_types=None,
+                # Let the LLM infer relationships on the fly
+                allowed_relation_types=None,
+                # LLM will generate any entity properties, set `None` to skip property generation (will be faster without)
+                allowed_relation_props=[],
+                # LLM will generate any relation properties, set `None` to skip property generation (will be faster without)
+                allowed_entity_props=[],
             )
+    
+            self.index = PropertyGraphIndex.from_documents(
+                
+                documents=[],  # Initialize empty
+                llm=Settings.llm,
+                embed_model=self.embed_model,
+                     #storage_context=instance.storage_context,
+                    show_progress=True,
+                    embed_kg_nodes=True,  # Enable embeddings for vector search
+                use_async=True,
+                property_graph_store=self.graph_store,
+                kg_extractors=[kg_extractor],  # Add our configured extractor
+                
+            )
+
+            modified_content = entry.content.replace("'", "\\'")
             
-            # Insert into property graph and document store
+
+            doc = Document(
+                doc_id=entry.id,
+                text=modified_content
+                
+            )
+
+            
+
             self.index.insert(doc)
-            
-            logger.debug(f"Added entry {entry.id} to property graph and document store")
-            return True
-            
+
         except Exception as e:
             logger.error(f"Error adding entry: {e}")
             return False
-
+    
+    async def aadd_entry(self, entry: MSEntry) -> bool:
+        """Async wrapper around add_entry."""
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(
+                None,
+                self.add_entry,
+                entry
+            )
+        except Exception as e:
+            logger.error(f"Error in async add entry: {e}", exc_info=True)
+            return False
 
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
         """Get an entry from the document store."""
@@ -225,36 +298,36 @@ class MSIndex:
             return []
 
 
-    async def get_chain(self, entry_id: str) -> List[MSEntry]:
-        """Get chain of entries using graph traversal."""
-        try:
-            if not self.neo4j_driver:
-                return []
+    # async def get_chain(self, entry_id: str) -> List[MSEntry]:
+    #     """Get chain of entries using graph traversal."""
+    #     try:
+    #         if not self.neo4j_driver:
+    #             return []
                 
-            async with self.neo4j_driver.session() as session:
-                result = await session.run(
-                    literal_query("""
-                    MATCH path = (start:Entry {id: $id})-[:CONTINUES*]->(end:Entry)
-                    UNWIND nodes(path) as n
-                    RETURN DISTINCT n
-                    ORDER BY n.created_at ASC
-                    """),
-                    {"id": entry_id}
-                )
+    #         # async with self.neo4j_driver.session() as session:
+    #         #     result = await session.run(
+    #         #         literal_query("""
+    #         #         MATCH path = (start:Entry {id: $id})-[:CONTINUES*]->(end:Entry)
+    #         #         UNWIND nodes(path) as n
+    #         #         RETURN DISTINCT n
+    #         #         ORDER BY n.created_at ASC
+    #         #         """),
+    #         #         {"id": entry_id}
+    #         #     )
                 
-                entries = []
-                async for record in result:
-                    try:
-                        entries.append(MSEntry.from_neo4j(record["n"]))
-                    except Exception as e:
-                        logger.error(f"Error converting node to entry: {e}")
-                        continue
+    #         #     entries = []
+    #         #     async for record in result:
+    #         #         try:
+    #         #             entries.append(MSEntry.from_neo4j(record["n"]))
+    #         #         except Exception as e:
+    #         #             logger.error(f"Error converting node to entry: {e}")
+    #         #             continue
                 
-                return entries
+    #         #     return entries
             
-        except Exception as e:
-            logger.error(f"Error getting entry chain for {entry_id}: {e}")
-            return []
+    #     except Exception as e:
+    #         logger.error(f"Error getting entry chain for {entry_id}: {e}")
+    #         return []
         
 
     async def search(
@@ -265,16 +338,15 @@ class MSIndex:
         limit: int = 5
     ) -> List[SearchResult]:
         """Search for entries using vector similarity and filters."""
-        if not self.searcher:
-            return []
-            
-        return await self.searcher.search(
+        # Import MSSearch only when needed
+        from .ms_search import MSSearch
+        searcher = MSSearch(self)
+        return await searcher.search(
             query=query,
             entry_types=entry_types,
             temporal_filter=temporal_filter,
             limit=limit
         )
-
 
     async def search_conversation(
         self,
@@ -283,16 +355,11 @@ class MSIndex:
         limit: int = 3
     ) -> List[SearchResult]:
         """Search specifically for conversation context."""
-        if not self.searcher:
-            return []
-            
-        return await self.searcher.conversation_context_search(
+        # Import MSSearch only when needed
+        from .ms_search import MSSearch
+        searcher = MSSearch(self)
+        return await searcher.conversation_context_search(
             message=message,
             temporal_filter=temporal_filter,
             limit=limit
         )
-
-    async def close(self):
-        """Clean up resources."""
-        if self.neo4j_driver:
-            await self.neo4j_driver.close()

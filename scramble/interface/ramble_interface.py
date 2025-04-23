@@ -71,9 +71,14 @@ class RambleInterface(InterfaceBase):
         self.console.print(f"[dim]{message}[/dim]")
 
     async def get_input(self) -> str:
-        """Get input from user."""
-        self.console.print(self.format_prompt(), end="")
-        return input()
+        """Get input from user with error handling."""
+        try:
+            self.console.print(self.format_prompt(), end="")
+            user_input = input()
+            return user_input
+        except (EOFError, KeyboardInterrupt):
+            # Re-raise to be handled by the main loop
+            raise
 
     async def clear(self) -> None:
         """Clear the display."""

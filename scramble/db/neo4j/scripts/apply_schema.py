@@ -8,6 +8,7 @@ import os
 import time
 from neo4j import GraphDatabase
 from pathlib import Path
+import logging
 
 def wait_for_neo4j(uri, max_attempts=30, delay=2):
     """Wait for Neo4j to become available"""
@@ -72,13 +73,13 @@ def apply_schema_file(driver, schema_file):
                 print("Continuing with next statement...")
 
 def main():
-    # Configuration
-    NEO4J_URI = "neo4j://localhost:7687"
+    # Configuration - use service name instead of localhost
+    NEO4J_URI = os.environ.get("NEO4J_URI", "neo4j://neo4j:7687")
     
-    # Get the schema directory path
+    # Get the schema directory path relative to the script
     script_dir = Path(__file__).resolve().parent
     schema_dir = script_dir.parent / 'schema'
-    
+    logging.info(f"Looking for schema files in: {schema_dir}")
     print(f"Looking for schema files in: {schema_dir}")
     
     # Get all .cypher files and sort them

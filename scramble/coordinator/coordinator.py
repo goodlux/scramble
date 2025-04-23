@@ -2,6 +2,7 @@
 from typing import Dict, List, Any, Optional, Tuple, cast
 from datetime import datetime
 import re
+import asyncio
 from scramble.utils.logging import get_logger
 from .active_conversation import ActiveConversation
 from .temporal_processor import TemporalProcessor
@@ -19,7 +20,7 @@ class Coordinator:
 
     def __init__(self):
         """Initialize the coordination system."""
-        self.scroll: Optional[MagicScroll] = None
+        self.magicscroll: Optional[MagicScroll] = None
         self.active_models: Dict[str, LLMModelBase] = {}
         self.active_conversation: Optional[ActiveConversation] = None
         self.temporal_processor = TemporalProcessor()
@@ -27,22 +28,53 @@ class Coordinator:
 
     @classmethod
     async def create(cls) -> 'Coordinator':
-        """Factory method to create and initialize coordinator."""
+        """Create and initialize coordinator with better error handling."""
         coordinator = cls()
-        await coordinator.initialize()
+        
+        try:
+            # Check if MagicScroll is disabled
+            import os
+            is_magicscroll_disabled = os.environ.get('DISABLE_MAGICSCROLL', '0') == '1'
+            
+            if is_magicscroll_disabled:
+                logger.info("MagicScroll disabled via environment variable")
+                coordinator.magicscroll = None
+            else:
+                # Initialize core systems with timeout protection
+                logger.info("Initializing MagicScroll...")
+                
+                # Try to initialize MagicScroll but don't let it block
+                try:
+                    # Create with timeout
+                    coordinator.magicscroll = await asyncio.wait_for(
+                        MagicScroll.create(),
+                        timeout=10.0  # 10 second timeout
+                    )
+                    logger.info("MagicScroll initialized successfully")
+                except asyncio.TimeoutError:
+                    logger.warning("MagicScroll initialization timed out - continuing with limited functionality")
+                    coordinator.magicscroll = None
+                except Exception as e:
+                    logger.error(f"MagicScroll initialization failed: {e}")
+                    coordinator.magicscroll = None
+            
+            # Always create message enricher, even if MagicScroll failed
+            logger.info("Creating MessageEnricher...")
+            coordinator.message_enricher = MessageEnricher(
+                coordinator.magicscroll, 
+                coordinator.temporal_processor
+            )
+            
+            logger.info("Core systems initialization complete")
+            
+        except Exception as e:
+            logger.error(f"Critical error during coordinator initialization: {e}")
+            # Continue with minimal functionality
+            if not coordinator.message_enricher:
+                coordinator.message_enricher = MessageEnricher(None, coordinator.temporal_processor)
+        
         return coordinator
 
-    async def initialize(self) -> None:
-        """Initialize the coordinator."""
-        try:
-            self.scroll = await MagicScroll.create()
-            # Initialize message enricher with MagicScroll and TemporalProcessor
-            if self.scroll:  # Type guard
-                self.message_enricher = MessageEnricher(self.scroll, self.temporal_processor)
-                logger.info("Core systems initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize core systems: {e}")
-            raise
 
     async def process_message(self, message: str) -> Dict[str, Any]:
         """Process a user message through the conversation system."""
@@ -50,8 +82,10 @@ class Coordinator:
             if not self.active_conversation:
                 await self.start_conversation()
 
-            if not self.scroll or not self.message_enricher:
-                raise RuntimeError("Core systems not initialized")
+            # Check only for message_enricher, MagicScroll can be None
+            if not self.message_enricher:
+                logger.warning("Message enricher not initialized, creating one now")
+                self.message_enricher = MessageEnricher(None, self.temporal_processor)
 
             if not self.active_models:
                 raise RuntimeError("No active models available")
@@ -246,50 +280,43 @@ class Coordinator:
         """Get list of currently active model names."""
         return list(self.active_models.keys())
 
-    async def end_conversation(self) -> str:
-        """End the current conversation and save it to storage."""
+    async def save_conversation_to_magicscroll(self) -> Optional[str]:
+        """Save the current conversation to MagicScroll storage."""
         try:
-            if not self.active_conversation or not self.scroll:
-                raise RuntimeError("No active conversation to end")
+            # Check for active conversation
+            if not self.active_conversation:
+                logger.warning("No active conversation to save")
+                return None
+                
+            # Check for MagicScroll
+            if not self.magicscroll:
+                logger.warning("MagicScroll not available - conversation will not be saved")
+                return None
 
-            # Format and save the complete conversation
-            conv_data = self.active_conversation.format_conversation_for_storage()
-            
-            # Create proper metadata from conversation data
-            metadata = {
-                "type": "conversation",
-                "start_time": conv_data["start_time"],
-                "active_models": conv_data["active_models"],
-                # Add any other useful metadata
-                "message_count": len(conv_data["messages"]),
-                "participants": list({msg["speaker"] for msg in conv_data["messages"]})
-            }
-            
-            # Convert message data to string format for storage
-            content = self.active_conversation.format_conversation()
-            
-            logger.info("=" * 50)
-            logger.info("Saving conversation to MagicScroll...")
-            logger.info(f"Active models: {', '.join(self.active_conversation.active_models)}")
-            logger.info(f"Messages in conversation: {len(self.active_conversation.messages)}")
-            
-            entry_id = await self.scroll.write_conversation(
-                content=content,
-                metadata=metadata
+            # Create conversation entry
+            from scramble.magicscroll.ms_entry import MSConversation
+            conversation = MSConversation(
+                content=self.active_conversation.format_conversation(),
+                metadata={
+                    "start_time": self.active_conversation.start_time.isoformat(),
+                    "end_time": datetime.utcnow().isoformat()
+                }
             )
             
-            logger.info(f"Conversation successfully saved with ID: {entry_id}")
-            logger.info("=" * 50)
-
-            # Clear the current conversation
-            self.active_conversation = None
-
-            return entry_id
+            # Try to save
+            try:
+                logger.info("Saving conversation to MagicScroll...")
+                entry_id = await self.magicscroll.save_ms_entry(conversation)
+                logger.info(f"Conversation saved with ID: {entry_id}")
+                
+                # Reset conversation
+                self.active_conversation = None
+                return entry_id
+                
+            except Exception as save_err:
+                logger.error(f"Error saving to MagicScroll: {save_err}")
+                return None
 
         except Exception as e:
-            logger.error(f"Error ending conversation: {e}")
-            raise
-
-    async def save_conversation_to_magicscroll(self) -> str:
-        """Save the current conversation to MagicScroll storage."""
-        return await self.end_conversation()
+            logger.error(f"Error preparing conversation for save: {e}")
+            return None

@@ -48,12 +48,18 @@ class MessageEnricher:
         r"(?:that|the) thing (?:we|you) (?:talked|discussed) about"
     ]
     
-    def __init__(self, magic_scroll: MagicScroll, temporal_processor: TemporalProcessor):
+    def __init__(self, magic_scroll: Optional[MagicScroll], temporal_processor: TemporalProcessor):
         """Initialize with required components."""
         self.scroll = magic_scroll
         self.temporal_processor = temporal_processor
         # Compile regex patterns for efficiency
         self.memory_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.MEMORY_PATTERNS]
+        
+        # Log the initialization state
+        if self.scroll is None:
+            logger.warning("MessageEnricher initialized without MagicScroll - memory features disabled")
+        else:
+            logger.info("MessageEnricher initialized with MagicScroll")
         
     async def enrich_message(self, message: str) -> Optional[str]:
         """
@@ -64,12 +70,23 @@ class MessageEnricher:
             # Skip enrichment for system messages or very short queries
             if message.startswith("system:") or len(message.split()) < 3:
                 return None
-                
+
+            # Skip enrichment if scroll is not available
+            if not self.scroll:
+                logger.info("MagicScroll not available - skipping enrichment")
+                return None
+
+            logger.info(f"Searching for context in message: {message}")
+
             context = EnrichedContext()
             memory_matches = self._check_memory_triggers(message)
             temporal_refs = self.temporal_processor.parse_temporal_references(message)
             
+            logger.info(f"Found {len(memory_matches)} memory triggers")
+            logger.info(f"Found {len(temporal_refs)} temporal references")
+
             if not memory_matches and not temporal_refs:
+                logger.info("No triggers or temporal references found - skipping enrichment")
                 return None
                 
             # Add topic context based on memory triggers
@@ -85,6 +102,7 @@ class MessageEnricher:
             
             # If we found relevant context, format and return it
             if context.topic_discussions or context.temporal_context:
+                logger.debug(f"Found topic_discussion or temporal_context")
                 return self._format_enriched_context(context, message)
             
             return None
@@ -99,6 +117,8 @@ class MessageEnricher:
         for pattern in self.memory_patterns:
             found = pattern.search(message)
             if found:
+                logger.info(f"Memory trigger matched: {pattern.pattern}")
+                logger.info(f"Match text: {found.group(0)}")
                 matches.append((pattern.pattern, found))
         return matches
     
@@ -126,28 +146,47 @@ class MessageEnricher:
     ) -> None:
         """Add topic-based context from previous discussions."""
         try:
-            seen_contents = set()  # Avoid duplicate content
-            
-            # Search through index using topics
-            if not self.scroll.index:
+            # Skip if scroll is not available
+            if not self.scroll:
+                logger.info("MagicScroll not available - skipping topic context")
                 return
                 
-            # Use search through MSIndex
-            results = await self.scroll.index.search(
-                query=message,
-                entry_types=[EntryType.CONVERSATION],
+            seen_contents = set()  # Avoid duplicate content
+            
+            # Use direct search method since we're going through a transition
+            logger.info(f"Searching for topics: {topics}")
+            logger.info(f"Search query: {message}")
+            
+            # Use search conversation method instead of going through index
+            results = await self.scroll.search_conversation(
+                message=message,
                 limit=3
             )
             
-            for result in results:
-                if result.entry.content not in seen_contents:
-                    context.topic_discussions.append({
-                        'timestamp': result.entry.created_at.isoformat(),
-                        'content': result.entry.content,
-                        'relevance': result.score,
-                        'matched_topic': list(topics)[0] if topics else 'message context'
-                    })
-                    seen_contents.add(result.entry.content)
+            # If no results yet, that's expected during migration
+            if not results:
+                logger.info("No search results found - expected during migration")
+                return
+                
+            logger.info(f"Found {len(results)} search results")
+            for idx, result in enumerate(results):
+                logger.info(f"Result {idx+1}:")
+                if hasattr(result, 'score'):
+                    logger.info(f"  Score: {result.score}")
+                if hasattr(result, 'entry') and hasattr(result.entry, 'created_at'):
+                    logger.info(f"  Timestamp: {result.entry.created_at}")
+                    # Log first 100 chars of content
+                    content_preview = result.entry.content[:100] if hasattr(result.entry, 'content') else "No content"
+                    logger.info(f"  Content preview: {content_preview}...")
+                    
+                    if result.entry.content not in seen_contents:
+                        context.topic_discussions.append({
+                            'timestamp': result.entry.created_at.isoformat(),
+                            'content': result.entry.content,
+                            'relevance': getattr(result, 'score', 0.0),
+                            'matched_topic': list(topics)[0] if topics else 'message context'
+                        })
+                        seen_contents.add(result.entry.content)
                     
         except Exception as e:
             logger.error(f"Error adding topic context: {e}")
@@ -159,6 +198,11 @@ class MessageEnricher:
     ) -> None:
         """Add context from specific time periods."""
         try:
+            # Skip if scroll is not available
+            if not self.scroll:
+                logger.info("MagicScroll not available - skipping temporal context")
+                return
+                
             for ref in temporal_refs:
                 ref_time = ref['value']
                 # Add a reasonable window around the reference time
@@ -169,27 +213,46 @@ class MessageEnricher:
                     'end': ref_time + window
                 }
                 
-                if not self.scroll.index:
-                    continue
-                    
-                # Search through index with temporal filter
-                results = await self.scroll.index.search(
+                logger.info(f"Temporal search:")
+                logger.info(f"  Reference: {ref['original_text']}")
+                logger.info(f"  Time window: {temporal_filter['start']} to {temporal_filter['end']}")
+                
+                # Use direct search method with temporal filtering
+                results = await self.scroll.search(
                     query="",  # Empty query to match all in timeframe
                     entry_types=[EntryType.CONVERSATION],
                     temporal_filter=temporal_filter,
                     limit=3
                 )
                 
-                for result in results:
-                    context.temporal_context.append({
-                        'timestamp': result.entry.created_at.isoformat(),
-                        'content': result.entry.content,
-                        'temporal_ref': ref['original_text']
-                    })
-                    
+                # If no results yet, that's expected during migration
+                if not results:
+                    logger.info("No temporal results found - expected during migration")
+                    continue
+                
+                logger.info(f"Found {len(results)} temporal results")
+                for idx, result in enumerate(results):
+                    logger.info(f"Result {idx+1}:")
+                    if hasattr(result, 'entry') and hasattr(result.entry, 'created_at'):
+                        logger.info(f"  Timestamp: {result.entry.created_at}")
+                        
+                        # Get content safely with attribute checks
+                        content = "No content"
+                        if hasattr(result, 'entry') and hasattr(result.entry, 'content'):
+                            content = result.entry.content
+                            # Log first 100 chars of content
+                            logger.info(f"  Content preview: {content[:100]}...")
+                        
+                        context.temporal_context.append({
+                            'timestamp': result.entry.created_at.isoformat(),
+                            'content': content,
+                            'temporal_ref': ref['original_text']
+                        })
+                        
         except Exception as e:
             logger.error(f"Error adding temporal context: {e}")
-    
+
+
     def _format_enriched_context(self, context: EnrichedContext, original_message: str) -> str:
         """Format the enriched context with the original message."""
         sections = []
@@ -199,26 +262,31 @@ class MessageEnricher:
             sections.append("\nRelevant previous discussions:")
             for disc in context.topic_discussions:
                 sections.append(f"""
-When: {disc['timestamp']}
-Matched on: {disc.get('matched_topic', 'context')}
-{disc['content']}
----""")
+    When: {disc['timestamp']}
+    Matched on: {disc.get('matched_topic', 'context')}
+    {disc['content']}
+    ---""")
         
         # Add temporal context if available
         if context.temporal_context:
             sections.append("\nFrom the time period you mentioned:")
             for entry in context.temporal_context:
                 sections.append(f"""
-{entry['temporal_ref']}: {entry['timestamp']}
-{entry['content']}
----""")
+    {entry['temporal_ref']}: {entry['timestamp']}
+    {entry['content']}
+    ---""")
         
         # Combine all context with original message
         if sections:
             context_str = "\n".join(sections)
-            return f"""Context from previous conversations:{context_str}
+            final_message = f"""Context from previous conversations:{context_str}
 
-Current message:
-{original_message}"""
+    Current message:
+    {original_message}"""
+            logger.info("Enriched context being injected:")
+            logger.info("-" * 50)
+            logger.info(final_message)
+            logger.info("-" * 50)
+            return final_message
         
         return original_message
