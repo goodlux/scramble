@@ -77,10 +77,41 @@ class OllamaLLMModel(LLMModelBase):
         
         # Add conversation history
         for msg in self.context_buffer:
-            messages.append({
-                "role": "assistant" if msg["role"] == "assistant" else "user",
-                "content": msg["content"]
-            })
+            # Check if this is a structured message with previous conversation references
+            content = msg["content"]
+            if msg["role"] == "user" and content.startswith("PREVIOUS CONVERSATIONS REFERENCE:"):
+                # Split the previous conversations from the actual user message
+                parts = content.split("CURRENT MESSAGE:", 1)
+                if len(parts) > 1:
+                    # Extract the actual user message
+                    user_message = parts[1].strip()
+                    context_reference = parts[0].strip()
+                    
+                    # Format the context in a way the model can't ignore, as part of the user message
+                    # Force the model to pay attention to this by phrasing it as a requirement
+                    formatted_message = f"""IMPORTANT - Your response must reference the following context information:
+
+{context_reference}
+
+Based on this context, please respond to: {user_message}"""
+                    
+                    # Add as a user message with the combined content
+                    messages.append({
+                        "role": "user",
+                        "content": formatted_message
+                    })
+                else:
+                    # Fallback if we can't split properly
+                    messages.append({
+                        "role": "user",
+                        "content": content
+                    })
+            else:
+                # Regular message
+                messages.append({
+                    "role": "assistant" if msg["role"] == "assistant" else "user",
+                    "content": content
+                })
         
         return messages
 
@@ -125,7 +156,31 @@ class OllamaLLMModel(LLMModelBase):
                 "options": options
             }
             
-            logger.debug(f"Generating response with parameters: {params}")
+            # Log parameters but filter out long message contents for clarity
+            debug_params = params.copy()
+            if 'messages' in debug_params:
+                debug_messages = []
+                for msg in debug_params['messages']:
+                    # Create a copy of the message with truncated content
+                    debug_msg = msg.copy()
+                    if 'content' in debug_msg and len(debug_msg['content']) > 100:
+                        debug_msg['content'] = debug_msg['content'][:100] + '...'
+                    debug_messages.append(debug_msg)
+                debug_params['messages'] = debug_messages
+            
+            logger.debug(f"Generating response with parameters: {debug_params}")
+            
+            # Log how many system messages we have (this helps debug context handling)
+            system_messages = [msg for msg in params['messages'] if msg.get('role') == 'system']
+            context_messages = [msg for msg in params['messages'] if msg.get('role') == 'user' 
+                             and 'IMPORTANT - Your response must reference the following context information:' in msg.get('content', '')]
+            logger.info(f"Sending {len(params['messages'])} messages to Ollama, including {len(system_messages)} system messages")
+            logger.info(f"Context included in {len(context_messages)} user messages")
+            
+            # Log the length of the context in the user message
+            if context_messages:
+                context_length = len(context_messages[0]['content'])
+                logger.info(f"Context message length: {context_length} characters")
             
             if stream:
                 return self._generate_stream(params)

@@ -23,6 +23,10 @@ def setup_logging(level: Optional[str] = None, debug_session: Optional[bool] = N
     # Use Config class for debug setting
     if debug_session is None:
         debug_session = Config.DEBUG_SESSION
+        
+    # Check if detailed logging is enabled
+    import os
+    detailed_logging = os.environ.get('SCRAMBLE_DETAILED_LOGGING', '0') == '1'
 
     # Explicitly type the handlers list
     handlers: List[logging.Handler] = []
@@ -54,9 +58,25 @@ def setup_logging(level: Optional[str] = None, debug_session: Optional[bool] = N
         session_file = log_dir / f'scramble_debug_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
         file_handler = logging.FileHandler(session_file)
         file_handler.setLevel(logging.DEBUG)  # Debug level just for file
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s'
-        ))
+        
+        # Use custom formatter to reduce verbose logging if not in detailed mode
+        if detailed_logging:
+            file_formatter = logging.Formatter(
+                '%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s'
+            )
+        else:
+            # Try to use the compact formatter if available
+            try:
+                from .logging_config import CompactFormatter
+                file_formatter = CompactFormatter(
+                    '%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s'
+                )
+            except ImportError:
+                file_formatter = logging.Formatter(
+                    '%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s'
+                )
+                
+        file_handler.setFormatter(file_formatter)
         handlers.append(file_handler)
         print(f"\n🤖 Claude's debug logs for this session: {session_file}\n")
 
@@ -66,6 +86,17 @@ def setup_logging(level: Optional[str] = None, debug_session: Optional[bool] = N
     root_logger.handlers = []
     for handler in handlers:
         root_logger.addHandler(handler)
+        
+    # Reduce verbosity of noisy libraries if not in detailed mode
+    if not detailed_logging:
+        logging.getLogger('httpcore').setLevel(logging.WARNING)
+        logging.getLogger('httpx').setLevel(logging.WARNING)
+        logging.getLogger('neo4j').setLevel(logging.INFO)
+        logging.getLogger('pymilvus').setLevel(logging.INFO)
+        logging.getLogger('_client').setLevel(logging.WARNING)
+        logging.getLogger('_trace').setLevel(logging.WARNING)
+        logging.getLogger('connectionpool').setLevel(logging.WARNING)
+        logging.getLogger('SentenceTransformer').setLevel(logging.INFO)
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger with the proper format."""

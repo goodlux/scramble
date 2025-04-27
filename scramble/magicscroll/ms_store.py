@@ -223,9 +223,9 @@ class MSStore:
     
 
     async def save_ms_entry(self, entry: MSEntry) -> bool:
-        """Store a MagicScroll entry with vector embedding."""
+        """Store a MagicScroll entry with vector embedding, using direct Redis approach."""
         try:
-            # Convert to LlamaIndex document
+            # Convert to LlamaIndex document for docstore (we'll still use this part)
             doc = entry.to_document()
             
             # Generate embedding
@@ -236,57 +236,38 @@ class MSStore:
             await self.doc_store.async_add_documents([doc])
             logger.info(f"Entry {entry.id} stored to redis docstore")
             
-            # Store in vector store if available
-            if self.vector_store:
-                try:
-                    # For non-container mode, use LlamaIndex vector store
-                    if not self.container_mode:
-                        from llama_index.core import Document
-                        from llama_index.core.schema import TextNode
-                        
-                        # Create TextNode for vector store
-                        node = TextNode(
-                            text=doc.text,
-                            id_=doc.doc_id,
-                            embedding=doc.embedding,
-                            metadata=doc.metadata
-                        )
-                        
-                        # Add to vector store
-                        await self.vector_store.async_add([node])
-                        logger.info(f"Entry {entry.id} stored to vector store")
-                    else:
-                        # For container mode, use Redis directly via docker exec
-                        # Format the embedding for Redis CLI
-                        embedding_str = " ".join([str(x) for x in embedding])
-                        
-                        # Create Redis hash with vector embedding
-                        import subprocess
-                        import json
-                        
-                        # Prepare metadata
-                        metadata_json = json.dumps(doc.metadata)
-                        
-                        # Construct Redis key
-                        redis_key = f"magicscroll_index:{doc.doc_id}"
-                        
-                        # Prepare HSET command
-                        hset_cmd = [
-                            "docker", "exec", "magicscroll-redis", "redis-cli",
-                            "HSET", redis_key,
-                            "text", doc.text,
-                            "doc_id", doc.doc_id,
-                            "metadata", metadata_json,
-                            "embedding", embedding_str
-                        ]
-                        
-                        # Execute command
-                        subprocess.check_output(hset_cmd)
-                        logger.info(f"Entry {entry.id} stored to vector store via container")
-                        
-                except Exception as vector_err:
-                    logger.error(f"Error storing entry in vector store: {vector_err}")
-                    # Continue despite vector store error
+            # DIRECT APPROACH: Skip LlamaIndex vector store and use Redis directly
+            try:
+                # Format the embedding for Redis CLI
+                embedding_str = " ".join([str(x) for x in embedding])
+                
+                # Create Redis hash with vector embedding
+                import subprocess
+                import json
+                
+                # Prepare metadata
+                metadata_json = json.dumps(doc.metadata)
+                
+                # Construct Redis key
+                redis_key = f"magicscroll_index:{doc.doc_id}"
+                
+                # Prepare HSET command
+                hset_cmd = [
+                    "docker", "exec", "magicscroll-redis", "redis-cli",
+                    "HSET", redis_key,
+                    "text", doc.text,
+                    "doc_id", doc.doc_id,
+                    "metadata", metadata_json,
+                    "embedding", embedding_str
+                ]
+                
+                # Execute command
+                subprocess.check_output(hset_cmd)
+                logger.info(f"✅ Entry {entry.id} stored directly to Redis with vector embedding")
+                    
+            except Exception as vector_err:
+                logger.error(f"Error storing entry with vector: {vector_err}")
+                # Continue despite vector store error
             
             return True
             
@@ -317,12 +298,30 @@ class MSStore:
 
 
     async def delete_ms_entry(self, entry_id: str) -> bool:
-        """Delete a MagicScroll entry."""
+        """Delete a MagicScroll entry using direct Redis approach."""
         try:
-            # Delete from both stores
+            # Delete from document store
             await self.doc_store.adelete_document(entry_id)
-            if self.vector_store:
-                await self.vector_store.adelete(entry_id)
+            
+            # DIRECT APPROACH: Delete from Redis vector store directly
+            try:
+                # Construct Redis key
+                redis_key = f"magicscroll_index:{entry_id}"
+                
+                # Prepare DEL command
+                import subprocess
+                del_cmd = [
+                    "docker", "exec", "magicscroll-redis", "redis-cli",
+                    "DEL", redis_key
+                ]
+                
+                # Execute command
+                subprocess.check_output(del_cmd)
+                logger.info(f"Entry {entry_id} deleted from vector store directly")
+            except Exception as vector_err:
+                logger.error(f"Error deleting entry from vector store: {vector_err}")
+                # Continue despite vector store error
+                
             return True
         except Exception as e:
             logger.error(f"Error deleting entry: {e}")

@@ -19,6 +19,13 @@ class Config:
     NEO4J_HOST: str = os.getenv("NEO4J_HOST", "localhost")
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     
+    # Digital Trinity Database Paths
+    SCRAMBLE_HOME: Path = Path.home() / ".scramble"
+    MAGICSCROLL_DIR: Path = SCRAMBLE_HOME / "magicscroll"
+    MILVUS_DB_PATH: Path = MAGICSCROLL_DIR / "digital_trinity_milvus.db"
+    SQLITE_DB_PATH: Path = MAGICSCROLL_DIR / "digital_trinity_sqlite.db"
+    OXIGRAPH_DB_PATH: Path = MAGICSCROLL_DIR / "digital_trinity_oxigraph.rocks"
+    
     # Neo4j settings
     NEO4J_URI: str = f"bolt://{NEO4J_HOST}:7687"
     NEO4J_USER: str = "neo4j"
@@ -55,6 +62,33 @@ class Config:
             "db": cls.REDIS_DB
         }
         return config
+        
+    @classmethod
+    def ensure_directory_structure(cls) -> None:
+        """Ensure all required directories exist"""
+        # Create ~/.scramble if it doesn't exist
+        cls.SCRAMBLE_HOME.mkdir(exist_ok=True)
+        
+        # Create ~/.scramble/magicscroll if it doesn't exist
+        cls.MAGICSCROLL_DIR.mkdir(exist_ok=True)
+        
+    @classmethod
+    def get_sqlite_path(cls) -> Path:
+        """Get the path to the SQLite database"""
+        cls.ensure_directory_structure()
+        return cls.SQLITE_DB_PATH
+    
+    @classmethod
+    def get_milvus_path(cls) -> Path:
+        """Get the path to the Milvus database"""
+        cls.ensure_directory_structure()
+        return cls.MILVUS_DB_PATH
+    
+    @classmethod
+    def get_oxigraph_path(cls) -> Path:
+        """Get the path to the Oxigraph database"""
+        cls.ensure_directory_structure()
+        return cls.OXIGRAPH_DB_PATH
 
 # Global config instance
 config = Config()

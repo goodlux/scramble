@@ -1,24 +1,29 @@
 """Core MagicScroll system providing simple storage and search capabilities."""
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
+import os
 
 from llama_index.core import Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.ollama import Ollama
 
-from .ms_entry import MSEntry, EntryType
-from .ms_store import MSStore
+from .ms_entry import MSEntry, EntryType, MSConversation
+from .ms_milvus_store import MSMilvusStore
 from .ms_types import SearchResult
+from .ms_fipa import MSFIPAStorage
 from scramble.utils.logging import get_logger
 from scramble.config import Config
 
 logger = get_logger(__name__)
 
 class MagicScroll:
+    """Core system for storing and searching chat conversations with context enrichment."""
+    
     def __init__(self):
         """Initialize with config."""
-        self.ms_store: Optional[MSStore] = None
+        self.ms_store = None
+        self.search_engine = None
+        self.fipa_storage = MSFIPAStorage()
 
     @classmethod 
     async def create(cls) -> 'MagicScroll':
@@ -30,15 +35,12 @@ class MagicScroll:
     async def initialize(self) -> None:
         """Initialize the components with better error handling."""
         try:
-            logger.info("Initializing MagicScroll with minimal requirements...")
+            logger.info("Initializing MagicScroll with Milvus Lite storage...")
             
-            # First set up llama-index settings to use local embeddings
+            # Set up llama-index settings to use local embeddings
             try:
-                logger.info("Setting up embedding model (local mode)...")
+                logger.info("Setting up embedding model...")
                 # Use local embedding model with significantly smaller footprint
-                from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-                
-                # Use a simpler model that's less likely to fail
                 embed_model = HuggingFaceEmbedding(
                     model_name="all-MiniLM-L6-v2",  # Much smaller and widely available
                     embed_batch_size=10
@@ -56,7 +58,7 @@ class MagicScroll:
                 logger.warning(f"Embedding model load failed: {str(model_err)}")
                 logger.warning("Will operate with reduced functionality")
                 
-                # Set a fallback
+                # Set a fallback if needed
                 try:
                     from llama_index.embeddings.base import SimilarityMode
                     from llama_index.embeddings.utils import FakeEmbedding
@@ -68,12 +70,12 @@ class MagicScroll:
                 except Exception:
                     pass
                 
-            # Try to connect to the store after embedding setup
-            self.ms_store = await MSStore.create()
+            # Initialize the Milvus store
+            self.ms_store = await MSMilvusStore.create()
             
-            # We'll defer loading the LLM until needed
-            # This is often what causes the long hangs
-            logger.info("Deferred loading of LLM model until needed")
+            # Initialize the search engine
+            from .ms_search import MSSearch
+            self.search_engine = MSSearch(self)
             
             logger.info("MagicScroll ready to unroll!")
         
@@ -81,6 +83,7 @@ class MagicScroll:
             logger.error(f"Failed to initialize MagicScroll: {str(e)}")
             # Create a minimal functional object instead of raising
             self.ms_store = None
+            self.search_engine = None
             logger.warning("MagicScroll running in minimal mode")
         
     async def save_ms_entry(self, entry: MSEntry) -> str:
@@ -124,10 +127,31 @@ class MagicScroll:
         temporal_filter: Optional[Dict[str, datetime]] = None,
         limit: int = 5
     ) -> List[SearchResult]:
-        """Search entries in the scroll."""
-        # TODO: Implement search through MSStore
-        logger.info("Search not yet implemented")
-        return []
+        """Search entries in the scroll using vector search."""
+        if not self.search_engine:
+            logger.warning("Search engine not available")
+            return []
+            
+        try:
+            logger.info(f"Searching with query: '{query}', limit={limit}")
+            if entry_types:
+                logger.info(f"Filtering by entry types: {[t.value for t in entry_types]}")
+            if temporal_filter:
+                logger.info(f"Filtering by time window: {temporal_filter}")
+                
+            # Use MSSearch to perform the search
+            results = await self.search_engine.search(
+                query=query,
+                entry_types=entry_types,
+                temporal_filter=temporal_filter,
+                limit=limit
+            )
+            
+            logger.info(f"Search returned {len(results)} results")
+            return results
+        except Exception as e:
+            logger.error(f"Error in search: {e}")
+            return []
 
     async def search_conversation(
         self,
@@ -135,10 +159,26 @@ class MagicScroll:
         temporal_filter: Optional[Dict[str, datetime]] = None,
         limit: int = 3
     ) -> List[SearchResult]:
-        """Search for conversation context."""
-        # TODO: Implement conversation search through MSStore
-        logger.info("Conversation search not yet implemented")
-        return []
+        """Search for conversation context using semantic similarity."""
+        if not self.search_engine:
+            logger.warning("Search engine not available")
+            return []
+            
+        try:
+            logger.info(f"Searching for conversation context with: '{message[:50]}...'")
+            
+            # Use MSSearch's conversation-optimized search
+            results = await self.search_engine.conversation_context_search(
+                message=message,
+                temporal_filter=temporal_filter,
+                limit=limit
+            )
+            
+            logger.info(f"Conversation search returned {len(results)} results")
+            return results
+        except Exception as e:
+            logger.error(f"Error in conversation search: {e}")
+            return []
 
     async def get_recent(
         self,
@@ -147,12 +187,72 @@ class MagicScroll:
         limit: int = 10
     ) -> List[MSEntry]:
         """Get recent entries."""
-        # TODO: Implement recent entries retrieval through MSStore
-        logger.info("Recent entries retrieval not yet implemented")
-        return []
+        if not self.ms_store or not hasattr(self.ms_store, 'get_recent_entries'):
+            logger.warning("Recent entries retrieval not available")
+            return []
+            
+        try:
+            entries = await self.ms_store.get_recent_entries(hours, entry_types, limit)
+            return entries
+        except Exception as e:
+            logger.error(f"Error retrieving recent entries: {e}")
+            return []
+
+    # FIPA-related methods
+    def create_fipa_conversation(self, metadata=None):
+        """Create a new FIPA conversation."""
+        return self.fipa_storage.create_conversation(metadata)
+    
+    def save_fipa_message(self, conversation_id, sender, receiver, 
+                         content, performative="INFORM", metadata=None):
+        """Save a FIPA message."""
+        return self.fipa_storage.save_message(
+            conversation_id, sender, receiver, content, performative, metadata
+        )
+    
+    def get_fipa_conversation(self, conversation_id, include_ephemeral=False):
+        """Get messages from a FIPA conversation."""
+        return self.fipa_storage.get_filtered_conversation(
+            conversation_id, include_ephemeral
+        )
+    
+    def close_fipa_conversation(self, conversation_id):
+        """Close a FIPA conversation."""
+        return self.fipa_storage.close_conversation(conversation_id)
+        
+    async def save_fipa_conversation_to_ms(self, conversation_id, metadata=None):
+        """Save filtered FIPA conversation to MagicScroll long-term memory."""
+        messages = self.fipa_storage.get_filtered_conversation(conversation_id)
+        
+        # Format the conversation for storage
+        formatted_content = self._format_fipa_conversation(messages)
+        
+        # Create conversation entry
+        entry = MSConversation(
+            content=formatted_content,
+            metadata={
+                "fipa_conversation_id": conversation_id,
+                "permanent_message_count": len(messages),
+                **(metadata or {})
+            }
+        )
+        
+        # Add to the index
+        return await self.save_ms_entry(entry)
+    
+    def _format_fipa_conversation(self, messages):
+        """Format FIPA messages into a storable conversation format."""
+        formatted = []
+        
+        for msg in messages:
+            sender = msg["sender"]
+            content = msg["content"]
+            formatted.append(f"{sender}: {content}")
+            
+        return "\n\n".join(formatted)
 
     async def close(self) -> None:
         """Close connections."""
-        # TODO: Make a close method in MSStore
-        # if self.ms_store:
-        #     await self.ms_store.close()
+        if self.ms_store and hasattr(self.ms_store, 'close'):
+            await self.ms_store.close()
+            logger.info("MagicScroll connections closed")

@@ -1,23 +1,8 @@
-"""MagicScroll - The unified knowledge store."""
-from .magic_scroll import MagicScroll
-from .ms_entry import MSEntry, MSConversation, MSDocument, MSImage, MSCode, EntryType
-from .ms_index import MSIndex
-from .ms_store import MSStore
-from .ms_search import MSSearch
-from .ms_graph import MSGraphManager
-from .ms_types import SearchResult
+"""MagicScroll module for context-aware storage and retrieval."""
 
-__all__ = [
-    'MagicScroll',
-    'MSEntry',
-    'MSConversation',
-    'MSDocument',
-    'MSImage',
-    'MSCode',
-    'EntryType',
-    'MSIndex',
-    'MSSearch',
-    'MSStore',
-    'MSGraphManager',
-    'SearchResult'
-]
+from .ms_entry import MSEntry, MSConversation, MSDocument, MSImage, MSCode, EntryType
+from .magic_scroll import MagicScroll
+from .ms_milvus_store import MSMilvusStore
+from .ms_search import MSSearch
+from .ms_types import SearchResult
+from .ms_fipa import MSFIPAStorage

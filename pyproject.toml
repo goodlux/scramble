@@ -23,19 +23,15 @@ dependencies = [
     "dateparser",
     "textual",
     "pyte",
-    "redis>=5.0.1",
+    "sqlite-vec>=0.1.6",    # SQLite vector search extension
     "llama-index-core>=0.12.0",  
-    "llama-index-storage-docstore-redis",
-    "llama-index-graph-stores-memgraph", # Neo4j graph store
     "llama-index-llms-ollama", #local model for llamaindex
     "duckdb",
-    "neo4j==5.26.0",
     "httpx>=0.26.0",
     "fastapi>=0.109.0",
     "ollama>=0.1.6",
     "pydantic>=2.5.3",
     "torch",
-    "types-redis",
     "pytest",
     "aiofiles",
 ]

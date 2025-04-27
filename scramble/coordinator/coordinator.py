@@ -1,10 +1,11 @@
 """Coordinator for model and scroll system."""
 from typing import Dict, List, Any, Optional, Tuple, cast
-from datetime import datetime
+from datetime import datetime, UTC
 import re
 import asyncio
 from scramble.utils.logging import get_logger
-from .active_conversation import ActiveConversation
+from scramble.utils.context_debugger import context_debugger
+from .active_conversation import ActiveConversation, MessageType
 from .temporal_processor import TemporalProcessor
 from .message_enricher import MessageEnricher
 from scramble.magicscroll.magic_scroll import MagicScroll 
@@ -78,6 +79,10 @@ class Coordinator:
 
     async def process_message(self, message: str) -> Dict[str, Any]:
         """Process a user message through the conversation system."""
+        # Handle debug commands
+        if message.startswith('/debug'):
+            return await self._handle_debug_command(message)
+            
         try:
             if not self.active_conversation:
                 await self.start_conversation()
@@ -106,11 +111,26 @@ class Coordinator:
             responding_model = self._get_responding_model(mentioned_model)
             
             # Add user message to conversation
-            await self.active_conversation.add_message(
+            user_message = await self.active_conversation.add_message(
                 message,
                 speaker="user",
-                recipient=mentioned_model
+                recipient=mentioned_model,
+                message_type=MessageType.PERMANENT
             )
+            
+            # Save to FIPA storage if available
+            if self.magicscroll and self.active_conversation.fipa_conversation_id:
+                try:
+                    self.magicscroll.save_fipa_message(
+                        self.active_conversation.fipa_conversation_id,
+                        "user",
+                        mentioned_model or "all",
+                        message,
+                        "INFORM",
+                        {"message_type": MessageType.PERMANENT.value, "message_id": user_message.message_id}
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to save user message to FIPA storage: {e}")
 
             # Build context for the model
             context = await self._build_model_context(
@@ -127,11 +147,26 @@ class Coordinator:
             response_text = await self._process_model_response(response)
 
             # Add model response to conversation
-            await self.active_conversation.add_message(
+            model_response = await self.active_conversation.add_message(
                 content=response_text,
                 speaker=responding_model,
-                recipient="User"  # TODO: Replace with actual user ID
+                recipient="User",  # TODO: Replace with actual user ID
+                message_type=MessageType.PERMANENT
             )
+            
+            # Save to FIPA storage if available
+            if self.magicscroll and self.active_conversation.fipa_conversation_id:
+                try:
+                    self.magicscroll.save_fipa_message(
+                        self.active_conversation.fipa_conversation_id,
+                        responding_model,
+                        "user",
+                        response_text,
+                        "INFORM",
+                        {"message_type": MessageType.PERMANENT.value, "message_id": model_response.message_id}
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to save model response to FIPA storage: {e}")
 
             return {
                 "response": response_text,
@@ -172,13 +207,68 @@ class Coordinator:
                         )
 
         # Get enriched historical context
-        enriched_context = await self.message_enricher.enrich_message(message)
-        if enriched_context:
-            context_parts.append(enriched_context)
+        enriched_context = await self.message_enricher.enrich_message(message, self.active_conversation)
+        if enriched_context and (enriched_context.topic_discussions or enriched_context.temporal_context):
+            # Format the enriched context properly
+            logger.info("===========================================================")
+            logger.info("ENRICHED CONTEXT FROM SEARCH RESULTS FOUND - ADDING TO MODEL CONTEXT")
+            logger.info(f"CONTEXT LENGTH: {len(enriched_context)} characters")
+            logger.info("===========================================================")
+            
+            # Use the message enricher to format the context
+            if self.message_enricher:
+                formatted_context = self.message_enricher.format_context_as_text(enriched_context, message)
+            else:
+                # Fallback to our own formatting if message enricher isn't available
+                formatted_context = self._format_enriched_context(enriched_context, message)
+            
+            # If we have missed conversation context, we need to combine it
+            # with the enriched context
+            if context_parts:
+                # Combine conversation context with formatted enriched context
+                conversation_context = "\n\n".join(context_parts)
+                
+                # Extract the original message part if possible
+                parts = formatted_context.split("CURRENT MESSAGE:", 1)
+                if len(parts) > 1:
+                    # Combine conversation context with enriched context
+                    enriched_prefix = parts[0]
+                    original_message = parts[1].strip()
+                    
+                    # Build new combined context
+                    complete_context = f"{conversation_context}\n\n{enriched_prefix}\nCURRENT MESSAGE:\n{original_message}"
+                else:
+                    # Fallback if we can't extract original message
+                    complete_context = f"{conversation_context}\n\n{formatted_context}"
+            else:
+                # No conversation context, just use formatted enriched context
+                complete_context = formatted_context
         else:
+            # No enriched context, use original message with any conversation context
+            logger.info("NO ENRICHED CONTEXT FOUND - USING ORIGINAL MESSAGE ONLY")
             context_parts.append(message)
-
-        return "\n\n".join(context_parts)
+            complete_context = "\n\n".join(context_parts)
+        
+        # Log the final complete context being sent to the model
+        logger.info("===========================================================")
+        logger.info("FINAL CONTEXT BEING SENT TO MODEL:")
+        logger.info(f"- TOTAL LENGTH: {len(complete_context)} characters")
+        logger.info("- PREVIEW: " + complete_context[:200] + "..." if len(complete_context) > 200 else complete_context)
+        logger.info("===========================================================")
+        
+        # Record context for debugging
+        context_debugger.record_context(
+            context=complete_context,
+            metadata={
+                "model": model_name,
+                "mentioned_model": mentioned_model,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "query": message[:100] if len(message) > 100 else message  # Include the original query
+            }
+        )
+        
+        # Since we're now logging to files, we won't alter the context sent to the model
+        return complete_context
 
     async def _process_model_response(self, response: Any) -> str:
         """Process model response into text."""
@@ -190,6 +280,66 @@ class Coordinator:
         async for chunk in response:
             response_chunks.append(chunk)
         return "".join(response_chunks)
+        
+    def _format_enriched_context(self, enriched_context, original_message: str) -> str:
+        """Format the enriched context with the original message."""
+        sections = []
+        
+        # Add topic-based discussions if available
+        if enriched_context.topic_discussions:
+            sections.append("\nSYSTEM MEMORY FROM PREVIOUS CONVERSATIONS:")
+            # Sort discussions by relevance score (highest first)
+            sorted_discussions = sorted(enriched_context.topic_discussions, 
+                                        key=lambda x: x.get('relevance', 0), 
+                                        reverse=True)
+            
+            for idx, disc in enumerate(sorted_discussions):
+                # Format the memory block clearly
+                conversation_id = disc.get('id', f"conv-{idx+1}")
+                timestamp = disc.get('timestamp', 'unknown time')
+                matched_topic = disc.get('matched_topic', 'previous conversation')
+                content = disc.get('content', '')
+                
+                sections.append(f"""
+===== MEMORY BLOCK {idx+1} =====
+CONVERSATION ID: {conversation_id}
+DATE: {timestamp}
+RELEVANCE: {disc.get('relevance', 0):.2f}
+TOPIC: {matched_topic}
+CONTENT:
+{content}
+=============================""")
+        
+        # Add temporal context if available
+        if enriched_context.temporal_context:
+            sections.append("\nSYSTEM MEMORY FROM TIME PERIOD YOU MENTIONED:")
+            for idx, entry in enumerate(enriched_context.temporal_context):
+                # Add an ID for easy reference
+                temporal_id = entry.get('id', f"time-{idx+1}")
+                timestamp = entry.get('timestamp', 'unknown time')
+                temporal_ref = entry.get('temporal_ref', 'mentioned time period')
+                content = entry.get('content', '')
+                
+                sections.append(f"""
+===== MEMORY BLOCK FROM {temporal_ref} =====
+MEMORY ID: {temporal_id}
+DATE: {timestamp}
+CONTENT:
+{content}
+=============================""")
+        
+        # Combine all context with original message
+        if sections:
+            context_str = "\n".join(sections)
+            final_message = f"""=========== SYSTEM MEMORY INJECTION ===========
+{context_str}
+
+=========== CURRENT MESSAGE ===========
+{original_message}
+======================================="""
+            return final_message
+        
+        return original_message
 
     def _get_responding_model(self, mentioned_model: Optional[str]) -> str:
         """Determine which model should respond."""
@@ -222,15 +372,49 @@ class Coordinator:
     async def start_conversation(self) -> None:
         """Start a new conversation session."""
         self.active_conversation = ActiveConversation()
+        
+        # Create FIPA conversation in MagicScroll if available
+        if self.magicscroll:
+            try:
+                # Create a new FIPA conversation
+                conversation_id = self.magicscroll.create_fipa_conversation({
+                    "start_time": datetime.now(UTC).isoformat(),
+                    "active_models": list(self.active_models.keys())
+                })
+                
+                # Set the FIPA conversation ID in active conversation
+                self.active_conversation.fipa_conversation_id = conversation_id
+                logger.info(f"FIPA conversation created with ID: {conversation_id}")
+            except Exception as e:
+                logger.error(f"Failed to create FIPA conversation: {e}")
+        
+        # Add models to the conversation
         for model_name in self.active_models:
             self.active_conversation.add_model(model_name)
+            
         # Add system message for conversation start
         if self.active_conversation:  # Type guard
             await self.active_conversation.add_message(
                 content="Started new conversation session",
                 speaker="system",
-                recipient=None
+                recipient=None,
+                message_type=MessageType.PERMANENT
             )
+            
+            # Save the system message to FIPA storage if available
+            if self.magicscroll and self.active_conversation.fipa_conversation_id:
+                try:
+                    self.magicscroll.save_fipa_message(
+                        self.active_conversation.fipa_conversation_id,
+                        "system",
+                        "all",
+                        "Started new conversation session",
+                        "INFORM",
+                        {"message_type": MessageType.PERMANENT.value}
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to save system message to FIPA storage: {e}")
+                    
             logger.info("New conversation session started")
 
     async def add_model_to_conversation(self, model_name: str) -> None:
@@ -280,6 +464,30 @@ class Coordinator:
         """Get list of currently active model names."""
         return list(self.active_models.keys())
 
+    async def _handle_debug_command(self, message: str) -> Dict[str, Any]:
+        """Handle debug commands for context visibility."""
+        try:
+            # Check for specific debug commands
+            if message.strip() == '/debug context' or message.strip() == '/debug':
+                # Just inform about context logging
+                return {
+                    "response": f"Context is being logged to disk in: ~/repos/scramble/logs/context_dumps/\nCheck this directory for context dump files.",
+                    "model": "system"
+                }
+                
+            # Default response for unrecognized commands
+            return {
+                "response": "Context logging is active. Check ~/repos/scramble/logs/context_dumps/ for context dumps.",
+                "model": "system"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error handling debug command: {e}")
+            return {
+                "response": f"Error processing debug command: {str(e)}",
+                "model": "system"
+            }
+
     async def save_conversation_to_magicscroll(self) -> Optional[str]:
         """Save the current conversation to MagicScroll storage."""
         try:
@@ -293,13 +501,42 @@ class Coordinator:
                 logger.warning("MagicScroll not available - conversation will not be saved")
                 return None
 
-            # Create conversation entry
+            # If we have a FIPA conversation ID, save using FIPA flow
+            if self.active_conversation.fipa_conversation_id:
+                try:
+                    # Close the FIPA conversation
+                    self.magicscroll.close_fipa_conversation(self.active_conversation.fipa_conversation_id)
+                    
+                    # Get metadata about the conversation
+                    metadata = {
+                        "models": list(self.active_conversation.active_models),
+                        "start_time": self.active_conversation.start_time.isoformat(),
+                        "end_time": datetime.now(UTC).isoformat(),
+                        "message_count": len(self.active_conversation.messages)
+                    }
+                    
+                    # Save to MagicScroll (which will filter appropriately)
+                    entry_id = await self.magicscroll.save_fipa_conversation_to_ms(
+                        self.active_conversation.fipa_conversation_id, metadata
+                    )
+                    
+                    logger.info(f"FIPA conversation saved with ID: {entry_id}")
+                    
+                    # Reset active conversation
+                    self.active_conversation = None
+                    return entry_id
+                    
+                except Exception as e:
+                    logger.error(f"Error saving FIPA conversation: {e}")
+                    # Fall back to traditional save
+            
+            # Default: Create conversation entry the traditional way
             from scramble.magicscroll.ms_entry import MSConversation
             conversation = MSConversation(
                 content=self.active_conversation.format_conversation(),
                 metadata={
                     "start_time": self.active_conversation.start_time.isoformat(),
-                    "end_time": datetime.utcnow().isoformat()
+                    "end_time": datetime.now(UTC).isoformat()
                 }
             )
             

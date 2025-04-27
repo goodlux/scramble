@@ -38,6 +38,31 @@ class AnthropicLLMModel(LLMModelBase):
             # Format the messages with context buffer
             messages = self._format_messages_with_context(prompt)
             
+            # Log how many system messages we have (this helps debug context handling)
+            system_messages = [msg for msg in messages if msg.get('role') == 'system']
+            context_messages = [msg for msg in messages if msg.get('role') == 'user' 
+                             and 'IMPORTANT - Your response must reference the following context information:' in msg.get('content', '')]
+            logger.info(f"Sending {len(messages)} messages to Anthropic, including {len(system_messages)} system messages")
+            logger.info(f"Context included in {len(context_messages)} user messages")
+            
+            # Log the length of the context in the user message
+            if context_messages:
+                context_length = len(context_messages[0]['content'])
+                logger.info(f"Context message length: {context_length} characters")
+            
+            # Debug log of the messages with truncated content
+            debug_messages = []
+            for msg in messages:
+                if isinstance(msg, dict):
+                    debug_msg = msg.copy()
+                    if 'content' in debug_msg and isinstance(debug_msg['content'], str) and len(debug_msg['content']) > 100:
+                        debug_msg['content'] = debug_msg['content'][:100] + '...'
+                    debug_messages.append(debug_msg)
+                else:
+                    debug_messages.append(str(msg)[:100] + '...')
+            
+            logger.debug(f"Messages: {debug_messages}")
+            
             response = await self.client.messages.create(
                 model=cast(ModelParam, self.model_id),
                 messages=messages,
@@ -80,16 +105,49 @@ class AnthropicLLMModel(LLMModelBase):
         
         # Add context buffer messages
         for msg in self.context_buffer:
-            formatted_messages.append(self._create_anthropic_message(
-                msg["role"],
-                msg["content"]
-            ))
+            content = msg["content"]
+            
+            # Check if this is a structured message with previous conversation references
+            if msg["role"] == "user" and content.startswith("PREVIOUS CONVERSATIONS REFERENCE:"):
+                # Split the previous conversations from the actual user message
+                parts = content.split("CURRENT MESSAGE:", 1)
+                if len(parts) > 1:
+                    # Extract the actual user message
+                    user_message = parts[1].strip()
+                    context_reference = parts[0].strip()
+                    
+                    # Format the context in a way the model can't ignore, as part of the user message
+                    # Force the model to pay attention to this by phrasing it as a requirement
+                    formatted_message = f"""IMPORTANT - Your response must reference the following context information:
+
+{context_reference}
+
+Based on this context, please respond to: {user_message}"""
+                    
+                    # Add as a user message with the combined content
+                    formatted_messages.append(self._create_anthropic_message(
+                        "user",
+                        formatted_message
+                    ))
+                else:
+                    # Fallback if we can't split properly
+                    formatted_messages.append(self._create_anthropic_message(
+                        msg["role"],
+                        content
+                    ))
+            else:
+                # Regular message
+                formatted_messages.append(self._create_anthropic_message(
+                    msg["role"],
+                    content
+                ))
         
-        # Add current prompt
-        formatted_messages.append(self._create_anthropic_message(
-            "user",
-            prompt
-        ))
+        # Add current prompt if it's not already added from context buffer
+        if not prompt.startswith("PREVIOUS CONVERSATIONS REFERENCE:"):
+            formatted_messages.append(self._create_anthropic_message(
+                "user",
+                prompt
+            ))
         
         return formatted_messages
 

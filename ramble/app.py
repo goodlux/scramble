@@ -104,7 +104,9 @@ def cli(no_magicscroll, simulate, ci_mode):
         console.print("[yellow]Ramble terminated by user[/yellow]")
         sys.exit(0)
     except Exception as e:
-        console.print(f"[red]Failed to start Ramble: {e}[/red]")
+        # Escape brackets in error message to prevent Rich markup errors
+        error_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+        console.print(f"[red]Failed to start Ramble: {error_msg}[/red]")
         import traceback
         console.print(traceback.format_exc())
         sys.exit(1)
