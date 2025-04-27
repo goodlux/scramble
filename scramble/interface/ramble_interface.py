@@ -48,6 +48,8 @@ class RambleInterface(InterfaceBase):
 
     def format_model_prompt(self, model_name: str) -> str:
         """Format prompt for model responses."""
+        if model_name == "system":
+            return "[bold red]system[/bold red]> "
         color = "green" if model_name == "granite" else "blue"  # Different colors for different models
         return f"[bold {color}]{model_name}[/bold {color}]> "
 
@@ -69,9 +71,14 @@ class RambleInterface(InterfaceBase):
         self.console.print(f"[dim]{message}[/dim]")
 
     async def get_input(self) -> str:
-        """Get input from user."""
-        self.console.print(self.format_prompt(), end="")
-        return input()
+        """Get input from user with error handling."""
+        try:
+            self.console.print(self.format_prompt(), end="")
+            user_input = input()
+            return user_input
+        except (EOFError, KeyboardInterrupt):
+            # Re-raise to be handled by the main loop
+            raise
 
     async def clear(self) -> None:
         """Clear the display."""

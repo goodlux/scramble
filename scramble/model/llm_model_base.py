@@ -1,5 +1,5 @@
 """Base class for Scramble's LLM models."""
-from typing import Dict, Any, AsyncGenerator, Union, List, Literal, TypedDict, Optional
+from typing import Dict, Any, AsyncGenerator, Union, List, Literal, TypedDict, Optional, ClassVar
 from datetime import datetime
 import asyncio
 import time
@@ -22,6 +22,8 @@ class Message(TypedDict):
 
 class LLMModelBase(ModelBase):
     """Base class adding Scramble-specific features to LLM models."""
+    
+    model_type: ClassVar[str] = "llm"
     
     def __init__(self):
         """Basic initialization only. Use create() instead."""
@@ -114,3 +116,22 @@ class LLMModelBase(ModelBase):
     async def generate_response(self, prompt: str, **kwargs: Any) -> Union[str, AsyncGenerator[str, None]]:
         """Generate a response from the model."""
         raise NotImplementedError
+        
+    async def process_input(self, input_data: Any) -> AsyncGenerator[str, None]:
+        """Implement ModelBase abstract method."""
+        if isinstance(input_data, str):
+            return self.generate_response(input_data)
+        elif isinstance(input_data, dict) and "message" in input_data:
+            return self.generate_response(input_data["message"])
+        else:
+            raise ValueError(f"Unsupported input type: {type(input_data)}")
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get information about the model."""
+        return {
+            "model_name": self.model_name,
+            "model_id": self.model_id,
+            "model_type": self.model_type,
+            "max_context_length": self.max_context_length,
+            "provider": self.config.get("provider", "unknown")
+        }

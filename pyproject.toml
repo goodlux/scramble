@@ -19,28 +19,21 @@ dependencies = [
     "anthropic",
     "click",
     "sentence-transformers>=2.5.0",
-    "numpy",
+    "numpy<2",
     "dateparser",
     "textual",
     "pyte",
-    "redis>=5.0.1",
-    "chromadb>=0.4.22",
-    "chromadb-client>=0.6.2",
-    "llama-index-core>=0.10.0",
-    "llama-index-embeddings-huggingface>=0.1.0",
-    "llama-index-vector-stores-chroma>=0.1.0",
-    "llama-index-storage-docstore-redis>=0.1.0",
-    "llama-index-storage-index-store-redis>=0.1.0",
+    "sqlite-vec>=0.1.6",    # SQLite vector search extension
+    "llama-index-core>=0.12.0",  
+    "llama-index-llms-ollama", #local model for llamaindex
     "duckdb",
-    "neo4j==5.15.0",
     "httpx>=0.26.0",
     "fastapi>=0.109.0",
     "ollama>=0.1.6",
     "pydantic>=2.5.3",
     "torch",
-    "types-redis",
     "pytest",
-    "aiofiles"
+    "aiofiles",
 ]
 
 [project.scripts]

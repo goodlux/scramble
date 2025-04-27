@@ -35,6 +35,16 @@ class OllamaLLMModel(LLMModelBase):
         
     async def _initialize_client(self) -> None:
         """Initialize Ollama client with configuration."""
+        # Check if we're in simulation mode
+        import os
+        simulation_mode = os.environ.get('SIMULATE_MODELS', '0') == '1'
+        
+        if simulation_mode:
+            logger.info(f"Simulation mode: Not connecting to Ollama for {self.model_name}")
+            self.client = "SIMULATED"  # Just set a non-None value
+            self.system_message = self.config.get("system_prompt", "")
+            return
+            
         try:
             # Get base_url from provider config if available
             provider_config = self.config.get("provider_config", {})
@@ -67,10 +77,41 @@ class OllamaLLMModel(LLMModelBase):
         
         # Add conversation history
         for msg in self.context_buffer:
-            messages.append({
-                "role": "assistant" if msg["role"] == "assistant" else "user",
-                "content": msg["content"]
-            })
+            # Check if this is a structured message with previous conversation references
+            content = msg["content"]
+            if msg["role"] == "user" and content.startswith("PREVIOUS CONVERSATIONS REFERENCE:"):
+                # Split the previous conversations from the actual user message
+                parts = content.split("CURRENT MESSAGE:", 1)
+                if len(parts) > 1:
+                    # Extract the actual user message
+                    user_message = parts[1].strip()
+                    context_reference = parts[0].strip()
+                    
+                    # Format the context in a way the model can't ignore, as part of the user message
+                    # Force the model to pay attention to this by phrasing it as a requirement
+                    formatted_message = f"""IMPORTANT - Your response must reference the following context information:
+
+{context_reference}
+
+Based on this context, please respond to: {user_message}"""
+                    
+                    # Add as a user message with the combined content
+                    messages.append({
+                        "role": "user",
+                        "content": formatted_message
+                    })
+                else:
+                    # Fallback if we can't split properly
+                    messages.append({
+                        "role": "user",
+                        "content": content
+                    })
+            else:
+                # Regular message
+                messages.append({
+                    "role": "assistant" if msg["role"] == "assistant" else "user",
+                    "content": content
+                })
         
         return messages
 
@@ -115,7 +156,31 @@ class OllamaLLMModel(LLMModelBase):
                 "options": options
             }
             
-            logger.debug(f"Generating response with parameters: {params}")
+            # Log parameters but filter out long message contents for clarity
+            debug_params = params.copy()
+            if 'messages' in debug_params:
+                debug_messages = []
+                for msg in debug_params['messages']:
+                    # Create a copy of the message with truncated content
+                    debug_msg = msg.copy()
+                    if 'content' in debug_msg and len(debug_msg['content']) > 100:
+                        debug_msg['content'] = debug_msg['content'][:100] + '...'
+                    debug_messages.append(debug_msg)
+                debug_params['messages'] = debug_messages
+            
+            logger.debug(f"Generating response with parameters: {debug_params}")
+            
+            # Log how many system messages we have (this helps debug context handling)
+            system_messages = [msg for msg in params['messages'] if msg.get('role') == 'system']
+            context_messages = [msg for msg in params['messages'] if msg.get('role') == 'user' 
+                             and 'IMPORTANT - Your response must reference the following context information:' in msg.get('content', '')]
+            logger.info(f"Sending {len(params['messages'])} messages to Ollama, including {len(system_messages)} system messages")
+            logger.info(f"Context included in {len(context_messages)} user messages")
+            
+            # Log the length of the context in the user message
+            if context_messages:
+                context_length = len(context_messages[0]['content'])
+                logger.info(f"Context message length: {context_length} characters")
             
             if stream:
                 return self._generate_stream(params)
@@ -130,6 +195,20 @@ class OllamaLLMModel(LLMModelBase):
 
     async def _generate_completion(self, params: Dict[str, Any]) -> str:
         """Generate a complete response."""
+        # Check if we're in simulation mode
+        import os
+        simulation_mode = os.environ.get('SIMULATE_MODELS', '0') == '1'
+        
+        if simulation_mode:
+            # Generate a simple simulated response
+            prompt = params.get("messages", [])[-1].get("content", "") if params.get("messages") else ""
+            simulated_response = f"[Simulated {self.model_name} Response] Echo: {prompt[:50]}..."
+            logger.info(f"Simulation mode: Generated response for {self.model_name}")
+            
+            # Add to context buffer for conversation continuity
+            self._add_to_context("assistant", simulated_response)
+            return simulated_response
+            
         try:
             if not self.client:
                 raise RuntimeError("Ollama client not initialized")
@@ -138,6 +217,8 @@ class OllamaLLMModel(LLMModelBase):
             if response and response.message:
                 response_text = response.message["content"]
                 logger.debug(f"Generated response: {response_text[:100]}...")  # Log first 100 chars
+                # Add to context buffer for conversation continuity
+                self._add_to_context("assistant", response_text)
                 return response_text
             return ""
             
@@ -147,13 +228,42 @@ class OllamaLLMModel(LLMModelBase):
     
     async def _generate_stream(self, params: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """Generate a streaming response."""
+        # Check if we're in simulation mode
+        import os
+        simulation_mode = os.environ.get('SIMULATE_MODELS', '0') == '1'
+        
+        if simulation_mode:
+            # Generate a simple simulated streaming response
+            prompt = params.get("messages", [])[-1].get("content", "") if params.get("messages") else ""
+            simulated_response = f"[Simulated {self.model_name} Response] Echo: {prompt[:50]}..."
+            
+            # Split into chunks to simulate streaming
+            chunks = [simulated_response[i:i+5] for i in range(0, len(simulated_response), 5)]
+            
+            # Add to context buffer
+            self._add_to_context("assistant", simulated_response)
+            
+            # Yield chunks with small delays
+            import asyncio
+            for chunk in chunks:
+                yield chunk
+                await asyncio.sleep(0.1)  # Simulate typing delay
+            return
+            
         if not self.client:
             raise RuntimeError("Ollama client not initialized")
 
+        full_response = ""
         try:
             async for chunk in await self.client.chat(**params):
                 if chunk and chunk.message and chunk.message.get("content"):
-                    yield chunk.message["content"]
+                    content = chunk.message["content"]
+                    full_response += content
+                    yield content
+                    
+            # Add complete response to context
+            if full_response:
+                self._add_to_context("assistant", full_response)
                     
         except Exception as e:
             logger.error(f"Error in stream generation: {str(e)}")

@@ -1,435 +1,365 @@
-"""LlamaIndex implementation for MagicScroll."""
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone  
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-import json
-from scramble.utils.logging import get_logger
+"""Neo4j and Redis storage implementation for MagicScroll using LlamaIndex."""
+from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Any, Optional, cast
+from neo4j import AsyncGraphDatabase, AsyncDriver, Query
+from typing_extensions import LiteralString
 
 # LlamaIndex core imports
-from llama_index.core import (
-    VectorStoreIndex,
-    Document,
-    StorageContext,
-    Settings,
-    load_index_from_storage,
-)
-
-# Database imports
-from llama_index.storage.docstore.redis import RedisDocumentStore
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.core.vector_stores import VectorStoreQuery
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import Settings, Document, StorageContext
+from llama_index.core.indices.property_graph import PropertyGraphIndex 
+from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
+from llama_index.graph_stores.memgraph import MemgraphPropertyGraphStore
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.storage.docstore.redis import RedisDocumentStore
+from llama_index.core.indices.property_graph import DynamicLLMPathExtractor
+from llama_index.core.indices.property_graph import SimpleLLMPathExtractor
+from llama_index.llms.ollama import Ollama
+from llama_index.core.node_parser import SentenceSplitter 
 
 # Local imports
 from scramble.config import Config
+from scramble.utils.logging import get_logger
 from .ms_entry import MSEntry, EntryType
-from .chroma_client import AsyncChromaClient, ChromaCollection
+from .ms_store import MSStore
+from .ms_types import SearchResult
+from .ms_search import MSSearch
+
+import asyncio
+import functools
 
 logger = get_logger(__name__)
 
-class MSIndexBase(ABC):
-    """Abstract base class for MagicScroll indices."""
-    
-    @abstractmethod
-    async def add_entry(self, entry: MSEntry) -> bool:
-        """Add an entry to the index. Returns True if successful."""
-        pass
-    
-    @abstractmethod
-    async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
-        """Get a specific entry by ID."""
-        pass
-    
-    @abstractmethod
-    async def delete_entry(self, entry_id: str) -> bool:
-        """Delete an entry by ID."""
-        pass
-    
-    @abstractmethod
-    async def search(self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5,
-        min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Search for entries. Returns list of matches with scores."""
-        pass
-    
-    @abstractmethod
-    async def get_recent(self,
-        hours: Optional[int] = None,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 10
-    ) -> List[MSEntry]:
-        """Get recent entries."""
-        pass
-    
-    @abstractmethod
-    async def get_chain(self, entry_id: str) -> List[MSEntry]:
-        """Get chain of entries connected by parent_id."""
-        pass
-    
-class LlamaIndexImpl(MSIndexBase):
-    """LlamaIndex implementation of MagicScroll index."""
+def literal_query(text: str) -> Query:
+    """Create a Query object from a string, casting to LiteralString."""
+    return Query(cast(LiteralString, text))
+
+
+class MSIndex:
+    """LlamaIndex implementation for MagicScroll."""
 
     def __init__(self):
         """Initialize basic attributes."""
         self.config = Config()
-        self.storage_path: Optional[Path] = None
-        self.chroma_client: Optional[AsyncChromaClient] = None
-        self.collection: Optional[ChromaCollection] = None
-        self.vector_store: Optional[ChromaVectorStore] = None
-        self.doc_store: Optional[RedisDocumentStore] = None
+        self.doc_store: Optional[MSStore] = None
+        self.graph_store: Optional[MemgraphPropertyGraphStore] = None
         self.storage_context: Optional[StorageContext] = None
-        self.index: Optional[VectorStoreIndex] = None
-
+        self.index: Optional[PropertyGraphIndex] = None
+        self.embed_model: Optional[HuggingFaceEmbedding] = None 
+        self.llm: Optional[Ollama] = None
+        
+        Settings.node_parser = SentenceSplitter(
+            chunk_size=1024,  # Increase from default 1024
+            chunk_overlap=50
+        )
+        
     @classmethod
-    async def create(cls, chroma_client: AsyncChromaClient, collection: ChromaCollection) -> 'LlamaIndexImpl':
-        """Factory method to create and initialize index asynchronously."""
+    async def create(cls, memgraph_url: str, auth: tuple[str, str]) -> 'MSIndex':
+        """Factory method to create and initialize index."""
         instance = cls()
         
         try:
-            # Set up storage path and required directories first
-            instance.storage_path = Path.home() / '.scramble' / 'magicscroll'
-            instance.storage_path.mkdir(parents=True, exist_ok=True)
+           
+
             
-            # Create required subdirectories
-            docstore_path = instance.storage_path / 'docstore'
-            docstore_path.mkdir(exist_ok=True)
-            vector_store_path = instance.storage_path / 'vector_store'
-            vector_store_path.mkdir(exist_ok=True)
+            logger.info("Configured local Ollama LLM for entity extraction")
+
+            # # Initialize embedding model
+            # instance.embed_model = HuggingFaceEmbedding(
+            #     model_name="BAAI/bge-small-en-v1.5"
+            # )
             
-            # Create minimal index_store.json if it doesn't exist
-            index_store_path = instance.storage_path / 'index_store.json'
-            if not index_store_path.exists():
-                logger.info("Creating initial index store file")
-                initial_store = {
-                    "index_store": {},
-                    "vector_store": {},
-                    "document_store": {}
-                }
-                with open(index_store_path, 'w') as f:
-                    json.dump(initial_store, f)
+            # instance.llm = Ollama(
+            #     model="granite3.1-dense:2b",  # Using granite model
+            #     request_timeout=3600,
+            #     temperature=0.1,
+            #     HuggingFaceEmbedding=HuggingFaceEmbedding(
+            #         model_name="BAAI/bge-small-en-v1.5"
+            #     ) 
+            # )
+
+            # Settings.embed_model = instance.embed_model
+            # Settings.llm = instance.llm
+            # Initialize Neo4j property graph store
+
+
+            # # Initialize redis document store before storage context and index.
+            # instance.doc_store = await RedisStore.create(
+            #     namespace="magicscroll"
+            # )
+
+            # # Initialize storage context with Redis docstore from our store wrapper
+            # instance.storage_context = StorageContext.from_defaults(
+            #     docstore=instance.doc_store.store,  # Use .store to get LlamaIndex's RedisDocumentStore
+            #     property_graph_store=instance.graph_store
+            # )
             
-            # Initialize ChromaDB with async client
-            instance.chroma_client = chroma_client
-            instance.collection = collection
-            instance.vector_store = ChromaVectorStore(
-                chroma_collection=collection
-            )
+            #Define our graph extraction config
+            # kg_extractor = DynamicLLMPathExtractor(
+            #     llm=llm,
+            #     max_triplets_per_chunk=20,
+            #     allowed_entity_types=[
+            #         # From our updated schema:
+            #         "Message",         # Our new Message type
+            #         "Conversation",    # Container for messages
+            #         "Topic",          # For topic linking
+            #         "Model",          # For model attribution
+            #         "User"            # For user messages
+            #     ],
+            #     allowed_relation_types=[
+            #         # Core message relationships from our schema
+            #         "SENT_BY",           # Message -> User/Model
+            #         "ADDRESSED_TO",      # Message -> User/Model
+            #         "PART_OF",          # Message -> Conversation
+            #         "NEXT_IN_SEQUENCE", # Message -> Message temporal sequence
+            #         "DISCUSSES",        # Message -> Topic
+            #         "REFERENCES"        # Message -> Message/Document/etc
+            #     ],
+            #     num_workers=4,
+            # )
+
+
+
+
+
+
+            # Initialize Property Graph Index with the extractor
+
+            # Initialize direct Neo4j driver for temporal queries
+            # instance.neo4j_driver = AsyncGraphDatabase.driver(
+            #     neo4j_url,
+            #     auth=auth
+            # )
             
-            # Initialize Redis document store
-            instance.doc_store = RedisDocumentStore.from_host_and_port(
-                host=instance.config.REDIS_HOST,
-                port=instance.config.REDIS_PORT,
-                namespace='scramble'
-            )
+            # # Test Neo4j connection
+            # async with instance.neo4j_driver.session() as session:
+            #     await session.run(literal_query("RETURN 1"))
             
-            # Initialize embedding model and settings
-            Settings.embed_model = HuggingFaceEmbedding(
-                model_name="BAAI/bge-large-en-v1.5",
-                embed_batch_size=32
-            )
-            Settings.node_parser = SentenceSplitter(
-                chunk_size=512,
-                chunk_overlap=50
-            )
-            Settings.llm = None  # Explicitly disable LLM usage
-            
-            # Create storage context
-            logger.info("Initializing storage context with Redis and ChromaDB")
-            instance.storage_context = StorageContext.from_defaults(
-                vector_store=instance.vector_store,
-                docstore=instance.doc_store,
-                persist_dir=str(instance.storage_path)
-            )
-            
-            # First time running - no existing index
-            if not (instance.storage_path / 'index_store.json').exists():
-                logger.info("No existing index found, creating new one")
-                instance.index = VectorStoreIndex(
-                    [],
-                    storage_context=instance.storage_context,
-                    show_progress=True
-                )
-            else:
-                # Try to load existing index
-                try:
-                    loaded_index = load_index_from_storage(
-                        storage_context=instance.storage_context,
-                        persist_dir=str(instance.storage_path)
-                    )
-                    if not isinstance(loaded_index, VectorStoreIndex):
-                        logger.warning("Loaded index is not VectorStoreIndex, creating new one")
-                        instance.index = VectorStoreIndex(
-                            [],
-                            storage_context=instance.storage_context,
-                            show_progress=True
-                        )
-                    else:
-                        instance.index = loaded_index
-                        logger.info("Successfully loaded existing index")
-                except Exception as load_err:
-                    logger.warning(f"Error loading existing index, creating new one: {load_err}")
-                    instance.index = VectorStoreIndex(
-                        [],
-                        storage_context=instance.storage_context,
-                        show_progress=True
-                    )
-            
-            logger.debug(f"Collection exists: {instance.collection is not None}")
-            logger.debug(f"Index exists: {instance.index is not None}")
+            logger.info("Initialized Memgraph Property Graph Index with Redis document store")
             return instance
             
         except Exception as e:
-            logger.error(f"Error initializing LlamaIndex: {e}")
-            raise RuntimeError(f"Failed to initialize LlamaIndex: {str(e)}")
-
-
-    async def add_entry(self, entry: MSEntry) -> bool:
-        """Add an entry to the index."""
-        try:
-            if not self.collection or not self.index:
-                logger.error("Collection or index not initialized")
-                return False
-
-            # Add debug logging for ChromaDB collection size
-            count = await self.collection.count()
-            logger.info(f"Current ChromaDB collection size: {count}")
-            
-            if not self.index.storage_context:
-                logger.error("Storage context not initialized")
-                return False
-                
-            # Log entry details
-            logger.debug(f"Adding entry - ID: {entry.id}")
-            logger.debug(f"Entry type: {entry.entry_type}")
-            logger.debug(f"Entry content preview: {entry.content[:100]}...")
-            logger.debug(f"Raw metadata: {entry.metadata}")
-                        
-            # First convert entry to dict and then sanitize for ChromaDB
-            entry_dict = entry.to_dict()
-            logger.debug(f"Entry dict: {entry_dict}")
-            
-            metadata_dict = MSEntry.sanitize_metadata_for_chroma(entry_dict)
-            logger.debug(f"Sanitized metadata: {metadata_dict}")
-            
-            # Create LlamaIndex document
-            doc = Document(
-                text=entry.content,
-                doc_id=entry.id,
-                extra_info=metadata_dict
-            )
-            
-            # Get embedding
-            logger.debug("Getting text embedding...")
-            embedding = Settings.embed_model.get_text_embedding(entry.content)
-            logger.debug(f"Embedding shape: {len(embedding)}")
-            
-            # Debug log the data being sent to ChromaDB
-            logger.debug("Preparing ChromaDB payload...")
-            
-            # Add to collection
-            logger.debug("Sending to ChromaDB...")
-            await self.collection.add(
-                embeddings=[embedding],
-                metadata_list=[metadata_dict],
-                documents=[entry.content],
-                ids=[entry.id]
-            )
-            
-            # Add to document store
-            if self.index.storage_context:
-                logger.debug("Adding to document store...")
-                self.index.storage_context.docstore.add_documents([doc])
-                self.index.storage_context.persist(persist_dir=str(self.storage_path))
-            
-            logger.debug(f"Successfully added entry {entry.id} to index")
-            return True
-                
-        except Exception as e:
-            logger.error(f"Error adding entry to index: {e}")
+            logger.error(f"Error initializing MSIndex: {e}")
             raise
+
+    def add_entry(self, entry: MSEntry) -> bool:
+        """Synchronous add entry - called internally."""
+        try:
+                
+            kg_extractor = DynamicLLMPathExtractor(
+                llm=self.llm,
+                max_triplets_per_chunk=20,
+                num_workers=4,
+                # Let the LLM infer entities and their labels (types) on the fly
+                allowed_entity_types=None,
+                # Let the LLM infer relationships on the fly
+                allowed_relation_types=None,
+                # LLM will generate any entity properties, set `None` to skip property generation (will be faster without)
+                allowed_relation_props=[],
+                # LLM will generate any relation properties, set `None` to skip property generation (will be faster without)
+                allowed_entity_props=[],
+            )
+    
+            self.index = PropertyGraphIndex.from_documents(
+                
+                documents=[],  # Initialize empty
+                llm=Settings.llm,
+                embed_model=self.embed_model,
+                     #storage_context=instance.storage_context,
+                    show_progress=True,
+                    embed_kg_nodes=True,  # Enable embeddings for vector search
+                use_async=True,
+                property_graph_store=self.graph_store,
+                kg_extractors=[kg_extractor],  # Add our configured extractor
+                
+            )
+
+            modified_content = entry.content.replace("'", "\\'")
             
+
+            doc = Document(
+                doc_id=entry.id,
+                text=modified_content
+                
+            )
+
+            
+
+            self.index.insert(doc)
+
+        except Exception as e:
+            logger.error(f"Error adding entry: {e}")
+            return False
+    
+    async def aadd_entry(self, entry: MSEntry) -> bool:
+        """Async wrapper around add_entry."""
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(
+                None,
+                self.add_entry,
+                entry
+            )
+        except Exception as e:
+            logger.error(f"Error in async add entry: {e}", exc_info=True)
+            return False
 
     async def get_entry(self, entry_id: str) -> Optional[MSEntry]:
-        """Get a specific entry."""
+        """Get an entry from the document store."""
         try:
-            if not self.index or not self.index.storage_context:
+            if not self.storage_context:
                 return None
                 
-            doc = self.index.storage_context.docstore.get_document(entry_id)
+            # Try docstore first
+            doc = await self.storage_context.docstore.aget_document(entry_id)
             if doc and isinstance(doc.metadata, dict):
                 return MSEntry.from_dict(doc.metadata)
+
+            # Fallback to graph store
+            if self.graph_store:
+                nodes = await self.graph_store.aget(ids=[entry_id])
+                if nodes and len(nodes) > 0:
+                    return MSEntry.from_dict(nodes[0].properties)
+                
+            return None
+                
         except Exception as e:
-            logger.error(f"Error retrieving entry {entry_id}: {e}")
-        return None
-    
+            logger.error(f"Error getting entry {entry_id}: {e}")
+            return None
+
 
     async def delete_entry(self, entry_id: str) -> bool:
-        """Delete an entry."""
+        """Delete an entry from both stores."""
         try:
-            if not self.index or not self.index.storage_context:
+            if not self.index or not self.storage_context:
                 return False
-                
+
+            # Delete from property graph and document store
             self.index.delete_ref_doc(entry_id)
-            self.index.storage_context.persist(str(self.storage_path))
-            logger.debug(f"Successfully deleted entry {entry_id}")
+            
+            logger.debug(f"Deleted entry {entry_id}")
             return True
+            
         except Exception as e:
             logger.error(f"Error deleting entry {entry_id}: {e}")
             return False
-    
 
-    async def search(self,
-        query: str,
-        entry_types: Optional[List[EntryType]] = None,
-        limit: int = 5,
-        min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Search for entries."""
-        try:
-            if not self.index:
-                return []
-                
-            logger.info(f"Beginning search for query: {query}")
-            
-            # Build metadata filter if entry types specified
-            metadata_filter = None
-            if entry_types:
-                metadata_filter = {
-                    "type": {"$in": [t.value for t in entry_types]}
-                }
-                logger.debug(f"Using metadata filter: {metadata_filter}")
-            
-            # Create query
-            vector_store_query = VectorStoreQuery(
-                query_str=query,
-                similarity_top_k=limit * 2  # Get extra results for score filtering
-            )
-            logger.debug(f"Created vector store query: {vector_store_query}")
-            
-            # Execute query without OpenAI dependency
-            query_engine = self.index.as_query_engine(
-                vector_store_query=vector_store_query,
-                similarity_top_k=limit * 2,
-                response_synthesizer=None  # This prevents OpenAI usage
-            )
-            logger.info("Executing query...")
-            query_result = query_engine.query(query)
-            logger.info(f"Query completed. Source nodes: {len(query_result.source_nodes)}")
-            
-            # Process results
-            results = []
-            for node in query_result.source_nodes:
-                if hasattr(node, 'score') and node.score < min_score:
-                    continue
-                    
-                try:
-                    metadata = getattr(node, 'metadata', {})
-                    if not metadata:
-                        continue
 
-                    entry = MSEntry.from_dict(metadata)
-                    result = {
-                        "entry": entry,
-                        "score": getattr(node, 'score', 1.0),
-                        "relevance_score": getattr(node, 'relevance_score', 1.0)
-                    }
-                    results.append(result)
-                 
-                except Exception as e:
-                    logger.error(f"Error processing node {node.node_id}: {e}")
-            
-            # Sort by score and limit results
-            results.sort(key=lambda x: x["score"], reverse=True)
-            return results[:limit]
-                
-        except Exception as e:
-            logger.error(f"Error searching index: {e}")
-            return []
-    
     async def get_recent(self,
         hours: Optional[int] = None,
         entry_types: Optional[List[EntryType]] = None,
         limit: int = 10
     ) -> List[MSEntry]:
-        """Get recent entries."""
+        """Get recent entries using temporal query."""
         try:
-            if not self.index or not self.index.storage_context:
+            if not self.neo4j_driver:
                 return []
-                
-            metadata_filter = {}
+
+            query_parts = ["MATCH (n:Entry)"]
+            params: Dict[str, Any] = {}
             
-            # Add time filter if specified
             if hours is not None:
-                cutoff = datetime.now(timezone.utc).timestamp() - (hours * 3600)
-                metadata_filter["created_at"] = {"$gt": cutoff}
+                query_parts.append("WHERE n.created_at >= datetime($cutoff)")
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+                params["cutoff"] = cutoff.isoformat()
+                
+                if entry_types:
+                    query_parts.append("AND n.type IN $types")
+                    params["types"] = [t.value for t in entry_types]
+            elif entry_types:
+                query_parts.append("WHERE n.type IN $types")
+                params["types"] = [t.value for t in entry_types]
             
-            # Add type filter if specified
-            if entry_types:
-                metadata_filter["type"] = {"$in": [t.value for t in entry_types]}
+            query_parts.extend([
+                "RETURN n",
+                "ORDER BY n.created_at DESC",
+                "LIMIT $limit"
+            ])
             
-            # Get all matching documents
-            matching_docs = []
-            for doc_id in self.index.storage_context.docstore.docs:
-                doc = self.index.storage_context.docstore.get_document(doc_id)
-                if doc is not None and self._matches_filter(doc.metadata, metadata_filter):
-                    matching_docs.append(doc)
+            params["limit"] = limit
             
-            # Sort by creation time and convert to entries
-            matching_docs.sort(
-                key=lambda x: datetime.fromisoformat(x.metadata["created_at"]),
-                reverse=True
-            )
-            
-            return [MSEntry.from_dict(doc.metadata) for doc in matching_docs[:limit]]
+            async with self.neo4j_driver.session() as session:
+                result = await session.run(
+                    literal_query(" ".join(query_parts)), 
+                    params
+                )
+                
+                entries = []
+                async for record in result:
+                    try:
+                        entries.append(MSEntry.from_neo4j(record["n"]))
+                    except Exception as e:
+                        logger.error(f"Error converting node to entry: {e}")
+                        continue
+                
+                return entries
             
         except Exception as e:
             logger.error(f"Error getting recent entries: {e}")
             return []
-    
-    async def get_chain(self, entry_id: str) -> List[MSEntry]:
-        """Get chain of entries connected by parent_id."""
-        try:
-            chain = []
-            current_id = entry_id
-            visited = set()
-            
-            while current_id and current_id not in visited:
-                visited.add(current_id)
-                entry = await self.get_entry(current_id)
+
+
+    # async def get_chain(self, entry_id: str) -> List[MSEntry]:
+    #     """Get chain of entries using graph traversal."""
+    #     try:
+    #         if not self.neo4j_driver:
+    #             return []
                 
-                if not entry:
-                    break
-                    
-                chain.append(entry)
-                current_id = entry.parent_id
-            
-            return list(reversed(chain))  # Return in chronological order
-            
-        except Exception as e:
-            logger.error(f"Error getting entry chain for {entry_id}: {e}")
-            return []
-    
-    def _matches_filter(self, metadata: Dict[str, Any], filter_dict: Dict[str, Any]) -> bool:
-        """Helper to check if metadata matches a filter dictionary."""
-        for key, filter_value in filter_dict.items():
-            if key not in metadata:
-                return False
+    #         # async with self.neo4j_driver.session() as session:
+    #         #     result = await session.run(
+    #         #         literal_query("""
+    #         #         MATCH path = (start:Entry {id: $id})-[:CONTINUES*]->(end:Entry)
+    #         #         UNWIND nodes(path) as n
+    #         #         RETURN DISTINCT n
+    #         #         ORDER BY n.created_at ASC
+    #         #         """),
+    #         #         {"id": entry_id}
+    #         #     )
                 
-            if isinstance(filter_value, dict):
-                # Handle operators like $gt, $lt, $in
-                for op, val in filter_value.items():
-                    if op == "$gt" and metadata[key] <= val:
-                        return False
-                    elif op == "$lt" and metadata[key] >= val:
-                        return False
-                    elif op == "$in" and metadata[key] not in val:
-                        return False
-            elif metadata[key] != filter_value:
-                return False
+    #         #     entries = []
+    #         #     async for record in result:
+    #         #         try:
+    #         #             entries.append(MSEntry.from_neo4j(record["n"]))
+    #         #         except Exception as e:
+    #         #             logger.error(f"Error converting node to entry: {e}")
+    #         #             continue
                 
-        return True
+    #         #     return entries
+            
+    #     except Exception as e:
+    #         logger.error(f"Error getting entry chain for {entry_id}: {e}")
+    #         return []
+        
+
+    async def search(
+        self,
+        query: str,
+        entry_types: Optional[List[EntryType]] = None,
+        temporal_filter: Optional[Dict[str, datetime]] = None,
+        limit: int = 5
+    ) -> List[SearchResult]:
+        """Search for entries using vector similarity and filters."""
+        # Import MSSearch only when needed
+        from .ms_search import MSSearch
+        searcher = MSSearch(self)
+        return await searcher.search(
+            query=query,
+            entry_types=entry_types,
+            temporal_filter=temporal_filter,
+            limit=limit
+        )
+
+    async def search_conversation(
+        self,
+        message: str,
+        temporal_filter: Optional[Dict[str, datetime]] = None,
+        limit: int = 3
+    ) -> List[SearchResult]:
+        """Search specifically for conversation context."""
+        # Import MSSearch only when needed
+        from .ms_search import MSSearch
+        searcher = MSSearch(self)
+        return await searcher.conversation_context_search(
+            message=message,
+            temporal_filter=temporal_filter,
+            limit=limit
+        )

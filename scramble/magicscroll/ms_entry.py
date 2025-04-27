@@ -1,165 +1,193 @@
-# ms_entry.py
+"""Domain types for MagicScroll."""
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 import uuid
 
+from llama_index.core import Document
+
 class EntryType(Enum):
-    """Types of entries that can be stored in the MagicScroll."""
+    """Types of entries in MagicScroll."""
     CONVERSATION = "conversation"
-    DOCUMENT = "document"
-    IMAGE = "image"
-    CODE = "code"
-    TOOL_CALL = "tool_call"
+    DOCUMENT = "document"  # For PDFs, text files, etc
+    IMAGE = "image"        # For image files
+    CODE = "code"         # For code snippets/files
 
 @dataclass
 class MSEntry:
-    """Base class for all MagicScroll entries."""
+    """Base class for MagicScroll entries."""
     content: str
     entry_type: EntryType
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
-    parent_id: Optional[str] = None
 
-    
+    def get_metadata(self) -> Dict[str, Any]:
+        """Get metadata dictionary without content."""
+        return {
+            "id": self.id,
+            "type": self.entry_type.value,
+            "created_at": self.created_at.isoformat(),
+            **self.metadata  # spread any additional metadata
+        }
+
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert entry to dictionary format."""
-        base_dict = {
+        return {
             "id": self.id,
             "content": self.content,
             "type": self.entry_type.value,
-            "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
+            **self.metadata
         }
-        
-        # Only include parent_id if it exists
-        if self.parent_id is not None:
-            base_dict["parent_id"] = self.parent_id
-            
-        return base_dict
-    
-    @staticmethod
-    def sanitize_metadata_for_chroma(metadata: Dict[str, Any]) -> Dict[str, Union[str, int, float, bool]]:
-        """Convert metadata values to ChromaDB compatible types."""
-        if metadata is None:
-            return {}
-            
-        sanitized = {}
-        for key, value in metadata.items():
-            # Skip None values
-            if value is None:
-                continue
-                
-            # Convert datetime to ISO string
-            if isinstance(value, datetime):
-                sanitized[key] = value.isoformat()
-            # Convert basic types
-            elif isinstance(value, (str, int, float, bool)):
-                sanitized[key] = value
-            # Convert dict to string (for nested metadata)
-            elif isinstance(value, dict):
-                sanitized[key] = str(value)
-            # Convert list to string
-            elif isinstance(value, list):
-                sanitized[key] = str(value)
-            # Convert any other type to string
-            else:
-                sanitized[key] = str(value)
-                
-        return sanitized
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MSEntry':
-        """Create entry from dictionary."""
+        """Create entry from dictionary format."""
+        # Convert created_at from ISO string to datetime
+        created_at = data.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        else:
+            created_at = datetime.utcnow()
+
+        # Extract core fields
+        entry_type = data.get("type", "conversation")
+        
+        # Extract metadata (excluding core fields)
+        metadata = {k: v for k, v in data.items() 
+                if k not in ['id', 'content', 'type', 'created_at']}
+
         return cls(
             id=data["id"],
             content=data["content"],
-            entry_type=EntryType(data["type"]),
-            metadata=data["metadata"],
-            created_at=datetime.fromisoformat(data["created_at"]),
-            updated_at=datetime.fromisoformat(data["updated_at"]),
-            parent_id=data.get("parent_id")  # Use get() to handle missing parent_id
+            entry_type=EntryType(entry_type),
+            metadata=metadata,
+            created_at=created_at
+        )
+
+    @classmethod 
+    def from_neo4j(cls, node: Any) -> 'MSEntry':
+        """Create entry from Neo4j node.
+        
+        Note: The node parameter is typed as Any to avoid circular imports,
+        but it should be a neo4j.graph.Node.
+        """
+        props = dict(node)
+        
+        # Convert Neo4j datetime to Python datetime
+        created_at = props.get('created_at')
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        else:
+            created_at = datetime.utcnow()
+            
+        # Get entry type, default to conversation
+        entry_type = props.get('type', 'conversation')
+
+        # Extract metadata (all props except the core ones)
+        metadata = {k: v for k, v in props.items() 
+                   if k not in ['id', 'content', 'type', 'created_at']}
+
+        return cls(
+            id=props['id'],
+            content=props['content'],
+            entry_type=EntryType(entry_type),
+            metadata=metadata,
+            created_at=created_at
+        )
+    
+    def to_document(self) -> Document:
+        """Convert entry to LlamaIndex Document for storage/indexing."""
+        return Document(
+            text=self.content,
+            doc_id=self.id,
+            metadata={
+                "type": self.entry_type.value,
+                "created_at": self.created_at.isoformat(),
+                **self.metadata
+            }
+        )
+
+    @classmethod
+    def from_document(cls, doc: Document) -> 'MSEntry':
+        """Create entry from LlamaIndex Document.
+        
+        Note: This assumes the document was created from an MSEntry.
+        It reconstructs the original entry type from metadata.
+        """
+        metadata = doc.metadata or {}
+        entry_type = metadata.get("type", "conversation")
+        
+        # Remove the fields we store separately
+        clean_metadata = {k: v for k, v in metadata.items() 
+                         if k not in ["type", "created_at"]}
+        
+        # Parse created_at back to datetime, default to now if not found
+        created_at = metadata.get("created_at")
+        if created_at:
+            created_at = datetime.fromisoformat(created_at)
+        else:
+            created_at = datetime.utcnow()
+
+        return cls(
+            id=doc.doc_id,
+            content=doc.text,
+            entry_type=EntryType(entry_type),
+            metadata=clean_metadata,
+            created_at=created_at
         )
 
 class MSConversation(MSEntry):
-    """Represents a conversation entry."""
+    """A conversation entry - fully implemented."""
     def __init__(
         self,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        parent_id: Optional[str] = None,
-        entry_id: Optional[str] = None
+        metadata: Optional[Dict[str, Any]] = None
     ):
         super().__init__(
-            id=entry_id or str(uuid.uuid4()),
             content=content,
             entry_type=EntryType.CONVERSATION,
             metadata={
                 **(metadata or {}),
                 "speaker_count": content.count("Assistant:") + content.count("User:")
-            },
-            parent_id=parent_id
+            }
         )
 
 class MSDocument(MSEntry):
-    """Represents a document entry."""
-    def __init__(
-        self,
-        title: str,
-        content: str,
-        uri: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        entry_id: Optional[str] = None
-    ):
-        super().__init__(
-            id=entry_id or str(uuid.uuid4()),
-            content=f"{title}\n\n{content}",
-            entry_type=EntryType.DOCUMENT,
-            metadata={
-                **(metadata or {}),
-                "title": title,
-                "uri": uri
-            }
+    """
+    A document entry (PDF, text, etc) - NOT YET IMPLEMENTED.
+    Will require appropriate LlamaIndex Reader (PDFReader, etc)
+    to convert to text before storage.
+    """
+    def __init__(self):
+        raise NotImplementedError(
+            "Document handling not yet implemented. "
+            "Will require LlamaIndex Reader setup."
         )
 
 class MSImage(MSEntry):
-    """Represents an image entry."""
-    def __init__(
-        self,
-        caption: str,
-        uri: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        entry_id: Optional[str] = None
-    ):
-        super().__init__(
-            id=entry_id or str(uuid.uuid4()),
-            content=caption,
-            entry_type=EntryType.IMAGE,
-            metadata={
-                **(metadata or {}),
-                "uri": uri
-            }
+    """
+    An image entry - NOT YET IMPLEMENTED.
+    Will require ImageReader or similar to extract/generate 
+    text content before storage.
+    """
+    def __init__(self):
+        raise NotImplementedError(
+            "Image handling not yet implemented. "
+            "Will require image processing setup."
         )
 
 class MSCode(MSEntry):
-    """Represents a code entry."""
-    def __init__(
-        self,
-        code: str,
-        language: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        entry_id: Optional[str] = None
-    ):
-        super().__init__(
-            id=entry_id or str(uuid.uuid4()),
-            content=code,
-            entry_type=EntryType.CODE,
-            metadata={
-                **(metadata or {}),
-                "language": language
-            }
+    """
+    A code entry - NOT YET IMPLEMENTED.
+    May require special handling for language-specific parsing
+    or documentation extraction.
+    """
+    def __init__(self):
+        raise NotImplementedError(
+            "Code handling not yet implemented. "
+            "Will require code parsing setup."
         )

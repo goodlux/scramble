@@ -1,0 +1,4792 @@
+{
+    "ramblemaxx/terminal.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "interface",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "set_interface",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "interface",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set the interface after initialization."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ChatTerminal",
+                "docstring": "Terminal with chat and command handling."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Terminal",
+            "Optional",
+            "Style"
+        ]
+    },
+    "ramblemaxx/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "RambleMaxx"
+        ]
+    },
+    "ramblemaxx/app.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "on_mount",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set up interface after app is mounted."
+            },
+            {
+                "name": "compose",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create the interface layout."
+            },
+            {
+                "name": "action_toggle_sidebar",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Toggle the side panel."
+            }
+        ],
+        "classes": [
+            {
+                "name": "RambleMaxx",
+                "docstring": "Terminal-based interface for Scramble."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "App",
+            "ComposeResult",
+            "Horizontal",
+            "Vertical",
+            "Header",
+            "Footer",
+            "MarkdownViewer",
+            "MAXXInterface",
+            "ChatTerminalWidget"
+        ]
+    },
+    "ramblemaxx/__main__.py": {
+        "functions": [
+            {
+                "name": "handle_sigint",
+                "parameters": [
+                    {
+                        "name": "signum",
+                        "default": null
+                    },
+                    {
+                        "name": "frame",
+                        "default": null
+                    }
+                ],
+                "docstring": "Handle Ctrl+C gracefully."
+            },
+            {
+                "name": "main",
+                "parameters": [],
+                "docstring": null
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "signal",
+            "RambleMaxx"
+        ]
+    },
+    "tools/generate_code_index.py": {
+        "functions": [
+            {
+                "name": "list_files",
+                "parameters": [
+                    {
+                        "name": "root_dir",
+                        "default": "List(elts=[], ctx=Load())"
+                    },
+                    {
+                        "name": "additional_paths",
+                        "default": null
+                    }
+                ],
+                "docstring": "Recursively list all Python files in the repo and additional paths (excluding virtual envs and non-Python files). "
+            },
+            {
+                "name": "extract_symbols_and_docs",
+                "parameters": [
+                    {
+                        "name": "file_path",
+                        "default": null
+                    }
+                ],
+                "docstring": "Parse the file using AST and extract classes, functions, their docstrings, and parameters. "
+            },
+            {
+                "name": "generate_code_index",
+                "parameters": [
+                    {
+                        "name": "root_dir",
+                        "default": "List(elts=[], ctx=Load())"
+                    },
+                    {
+                        "name": "extra_paths",
+                        "default": null
+                    }
+                ],
+                "docstring": "Main function to generate the codebase index. "
+            },
+            {
+                "name": "generate_external_index",
+                "parameters": [
+                    {
+                        "name": "extra_paths",
+                        "default": null
+                    }
+                ],
+                "docstring": "Generate index only for the given external paths (no root project files). "
+            },
+            {
+                "name": "save_to_json",
+                "parameters": [
+                    {
+                        "name": "data",
+                        "default": null
+                    },
+                    {
+                        "name": "output_dir",
+                        "default": null
+                    },
+                    {
+                        "name": "filename",
+                        "default": null
+                    }
+                ],
+                "docstring": "Save the generated index to a JSON file in the specified directory. "
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [
+            "todos",
+            "todo",
+            "fixme",
+            "todos"
+        ],
+        "imports": [
+            "ast",
+            "os",
+            "json",
+            "Path"
+        ]
+    },
+    "tools/do_the_chores.py": {
+        "functions": [
+            {
+                "name": "parse_priority",
+                "parameters": [
+                    {
+                        "name": "priority_str",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "scan_file",
+                "parameters": [
+                    {
+                        "name": "filepath",
+                        "default": null
+                    }
+                ],
+                "docstring": "Scan a file for TODO comments."
+            },
+            {
+                "name": "generate_markdown",
+                "parameters": [
+                    {
+                        "name": "todos_by_file",
+                        "default": null
+                    }
+                ],
+                "docstring": "Generate formatted markdown with categorization."
+            },
+            {
+                "name": "main",
+                "parameters": [],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "Priority",
+                "docstring": null
+            },
+            {
+                "name": "TodoItem",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "os",
+            "re",
+            "Path",
+            "datetime",
+            "Dict",
+            "List",
+            "Tuple",
+            "NamedTuple",
+            "Enum"
+        ]
+    },
+    "tests/test_ollama_model.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "tests/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "living_room/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/config.py": {
+        "functions": [
+            {
+                "name": "is_living_room",
+                "parameters": [
+                    {
+                        "name": "cls",
+                        "default": null
+                    }
+                ],
+                "docstring": "Check if we're in living room mode"
+            },
+            {
+                "name": "get_neo4j_config",
+                "parameters": [
+                    {
+                        "name": "cls",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get Neo4j connection configuration"
+            },
+            {
+                "name": "get_redis_config",
+                "parameters": [
+                    {
+                        "name": "cls",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get Redis configuration"
+            }
+        ],
+        "classes": [
+            {
+                "name": "Config",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Optional",
+            "Dict",
+            "Any",
+            "os",
+            "Path",
+            "load_dotenv"
+        ]
+    },
+    "scramble/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "RambleInterface",
+            "Coordinator",
+            "AnthropicLLMModel",
+            "MagicScroll",
+            "Config"
+        ]
+    },
+    "scramble/__main__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "cli"
+        ]
+    },
+    "ramble/context_controller.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "interface",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with reference to parent interface."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ContextController",
+                "docstring": "Handles context-related commands and operations."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Optional",
+            "Dict",
+            "Any",
+            "Table",
+            "datetime",
+            "logging"
+        ]
+    },
+    "ramble/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "RambleCLI"
+        ]
+    },
+    "ramble/app.py": {
+        "functions": [
+            {
+                "name": "cli",
+                "parameters": [],
+                "docstring": "Ramble - Context-aware CLI chat interface"
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Name(id='DEFAULT_CONFIG', ctx=Load())"
+                    },
+                    {
+                        "name": "config",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize the CLI with core components."
+            }
+        ],
+        "classes": [
+            {
+                "name": "AppConfig",
+                "docstring": "Main application configuration."
+            },
+            {
+                "name": "RambleCLI",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "asyncio",
+            "sys",
+            "click",
+            "Dict",
+            "TypedDict",
+            "Optional",
+            "Console",
+            "RambleInterface",
+            "setup_logging",
+            "get_logger"
+        ]
+    },
+    "ramblemaxx/ui/themes.py": {
+        "functions": [
+            {
+                "name": "get_theme",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "default": "Constant(value='default')"
+                    }
+                ],
+                "docstring": "Get a theme by name."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MAXXTheme",
+                "docstring": "Theme configuration for RambleMAXX."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "dataclass"
+        ]
+    },
+    "ramblemaxx/ui/code.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "CodePanelTool",
+                "docstring": "Tool for managing the code panel."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "LocalTool",
+            "Dict",
+            "Any",
+            "Literal",
+            "Optional"
+        ]
+    },
+    "ramblemaxx/ui/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramblemaxx/ui/chat.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value='user')"
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    },
+                    {
+                        "name": "message_type",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "render",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "ChatMessage",
+                "docstring": "Individual chat message with role-based styling."
+            },
+            {
+                "name": "ChatLog",
+                "docstring": "Scrollable chat history with markdown support."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Static",
+            "reactive",
+            "Markdown",
+            "Optional"
+        ]
+    },
+    "ramblemaxx/tools/code.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "CodePanelTool",
+                "docstring": "Tool for managing the code panel."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "LocalTool",
+            "Dict",
+            "Any",
+            "Literal",
+            "Optional"
+        ]
+    },
+    "ramblemaxx/tools/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "LocalTool",
+            "ToolInterface",
+            "ToolRegistry"
+        ]
+    },
+    "ramblemaxx/tools/docs.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "DocumentViewerTool",
+                "docstring": "Tool for controlling the document viewer panel."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "LocalTool",
+            "Dict",
+            "Any",
+            "Literal",
+            "Optional"
+        ]
+    },
+    "ramblemaxx/tools/ui_tools.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "ModelSelectorTool",
+                "docstring": "Tool for managing model selection."
+            },
+            {
+                "name": "ThemeSwitcherTool",
+                "docstring": "Tool for controlling UI themes."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "LocalTool",
+            "Dict",
+            "Any",
+            "Literal",
+            "Optional"
+        ]
+    },
+    "ramblemaxx/tools/viz.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "VisualizerTool",
+                "docstring": "Tool for data visualization."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "LocalTool",
+            "Dict",
+            "Any",
+            "Literal",
+            "Optional"
+        ]
+    },
+    "boneyard/semantic_compressor/core/store.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "storage_path",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "validate_timestamps",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Validate and normalize timestamps in all contexts."
+            },
+            {
+                "name": "_load_metadata",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Load or create store metadata."
+            },
+            {
+                "name": "_create_metadata",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create fresh store metadata."
+            },
+            {
+                "name": "_save_metadata",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "metadata",
+                        "default": null
+                    }
+                ],
+                "docstring": "Save store metadata."
+            },
+            {
+                "name": "_load_contexts",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Load all contexts from storage directory."
+            },
+            {
+                "name": "_get_chain",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Internal method to get chain contexts."
+            },
+            {
+                "name": "add",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "context",
+                        "default": null
+                    }
+                ],
+                "docstring": "Store a compressed context."
+            },
+            {
+                "name": "get_recent_contexts",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=48)"
+                    },
+                    {
+                        "name": "hours",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "limit",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "get_conversation_summary",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get summary of conversation history."
+            },
+            {
+                "name": "list",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "List all stored contexts."
+            },
+            {
+                "name": "reindex",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Rebuild context index and chain relationships."
+            },
+            {
+                "name": "get_date_range",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get date range of all contexts."
+            },
+            {
+                "name": "get_date_range_str",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get human readable date range string."
+            },
+            {
+                "name": "add_with_full",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "context",
+                        "default": null
+                    }
+                ],
+                "docstring": "Store both compressed and full versions of a context."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "store_path",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "get_conversation_chain",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Public method to access conversation chains."
+            },
+            {
+                "name": "find_contexts_by_timeframe",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "query",
+                        "default": null
+                    }
+                ],
+                "docstring": "Find contexts using natural language time reference."
+            },
+            {
+                "name": "select_contexts",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    },
+                    {
+                        "name": "candidates",
+                        "default": null
+                    }
+                ],
+                "docstring": "Select contexts within token budget with improved scoring."
+            },
+            {
+                "name": "process_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Process message and select relevant contexts."
+            },
+            {
+                "name": "build_chain",
+                "parameters": [
+                    {
+                        "name": "start_id",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "ContextStore",
+                "docstring": "Manages basic storage and retrieval of contexts."
+            },
+            {
+                "name": "ContextManager",
+                "docstring": "Handles higher-level context operations and chain management."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Optional",
+            "Any",
+            "Union",
+            "Tuple",
+            "Path",
+            "pickle",
+            "logging",
+            "dateparser",
+            "datetime",
+            "timedelta",
+            "json",
+            "numpy",
+            "SemanticCompressor",
+            "Context"
+        ]
+    },
+    "boneyard/semantic_compressor/core/config.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize configuration manager."
+            }
+        ],
+        "classes": [
+            {
+                "name": "APIConfig",
+                "docstring": "API configuration including model settings."
+            },
+            {
+                "name": "StorageConfig",
+                "docstring": "Storage configuration for MagicScroll."
+            },
+            {
+                "name": "InterfaceConfig",
+                "docstring": "Interface configuration for both Ramble and RambleMAXX."
+            },
+            {
+                "name": "Config",
+                "docstring": "Central configuration management for Scramble."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "Optional",
+            "Path",
+            "yaml",
+            "logging",
+            "aiofiles",
+            "dataclass",
+            "datetime"
+        ]
+    },
+    "boneyard/semantic_compressor/core/scroll.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "filter_view",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "models",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "since",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "until",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get filtered view of the scroll."
+            },
+            {
+                "name": "_get_context_thread",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get the thread of entries related to a context."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ScrollEntry",
+                "docstring": "A single entry in the scroll."
+            },
+            {
+                "name": "Scroll",
+                "docstring": "The continuous timeline of all interactions.\nThis is the core concept - everything else builds on this."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "dataclass",
+            "datetime",
+            "List",
+            "Optional",
+            "Dict",
+            "Any",
+            "UUID",
+            "uuid4"
+        ]
+    },
+    "boneyard/semantic_compressor/core/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Context",
+            "SemanticCompressor",
+            "ContextStore",
+            "AnthropicClient"
+        ]
+    },
+    "boneyard/semantic_compressor/core/model_coordinator.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize the coordinator with LLMHarness."
+            },
+            {
+                "name": "detect_model_from_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Public method for detecting which model to use based on message content."
+            },
+            {
+                "name": "_detect_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Internal model detection implementation."
+            },
+            {
+                "name": "_build_system_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "contexts",
+                        "default": null
+                    }
+                ],
+                "docstring": "Build system message from contexts."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ModelCoordinator",
+                "docstring": "Coordinates model interactions and maintains model state."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "Optional",
+            "List",
+            "datetime",
+            "LLMHarness",
+            "Context"
+        ]
+    },
+    "boneyard/semantic_compressor/core/api.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "api_key",
+                        "default": "Constant(value='claude-3-5-sonnet-latest')"
+                    },
+                    {
+                        "name": "model",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "compressor",
+                        "default": "Constant(value=10)"
+                    },
+                    {
+                        "name": "max_context_messages",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "context_manager",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize the Anthropic client."
+            },
+            {
+                "name": "_build_messages_from_context",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "contexts",
+                        "default": null
+                    }
+                ],
+                "docstring": "Convert contexts into a list of messages for the API."
+            },
+            {
+                "name": "_build_system_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "contexts",
+                        "default": null
+                    }
+                ],
+                "docstring": "Build system message incorporating context themes and relevant information."
+            },
+            {
+                "name": "send_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "message",
+                        "default": "Constant(value=1024)"
+                    },
+                    {
+                        "name": "contexts",
+                        "default": "Constant(value=0.7)"
+                    },
+                    {
+                        "name": "max_tokens",
+                        "default": null
+                    },
+                    {
+                        "name": "temperature",
+                        "default": null
+                    }
+                ],
+                "docstring": "Send a message to Claude with conversation persistence."
+            }
+        ],
+        "classes": [
+            {
+                "name": "AnthropicClient",
+                "docstring": "Handles interaction with Anthropic's API with semantic compression and conversation persistence."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Optional",
+            "Any",
+            "Union",
+            "Iterable",
+            "anthropic",
+            "pickle",
+            "Message",
+            "TextBlock",
+            "ToolUseBlock",
+            "ContentBlock",
+            "TextBlockParam",
+            "MessageParam",
+            "NotGiven",
+            "NOT_GIVEN",
+            "logging",
+            "datetime",
+            "timedelta",
+            "Context",
+            "SemanticCompressor",
+            "ContextManager",
+            "global_stats"
+        ]
+    },
+    "boneyard/semantic_compressor/core/context.py": {
+        "functions": [
+            {
+                "name": "__eq__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "other",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__hash__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "text_content",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get full text content from compressed tokens."
+            },
+            {
+                "name": "size",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Return the size of the compressed context in tokens."
+            },
+            {
+                "name": "token_count",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get actual token count from metadata or estimate from compressed tokens."
+            },
+            {
+                "name": "parent_id",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get parent context ID if it exists."
+            },
+            {
+                "name": "summary",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Generate a brief summary of this context."
+            }
+        ],
+        "classes": [
+            {
+                "name": "Context",
+                "docstring": "Represents a compressed conversation context."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "dataclass",
+            "field",
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "Literal",
+            "datetime",
+            "numpy",
+            "dateparser"
+        ]
+    },
+    "boneyard/semantic_compressor/core/scroll_manager.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "_detect_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Detect which model to use based on message."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ScrollManager",
+                "docstring": "Manages the scroll and model interactions."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Optional",
+            "Scroll",
+            "ScrollEntry",
+            "LLMHarness"
+        ]
+    },
+    "boneyard/semantic_compressor/core/stats.py": {
+        "functions": [
+            {
+                "name": "compression_ratio",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "tokens_saved",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "record_compression",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "original_tokens",
+                        "default": null
+                    },
+                    {
+                        "name": "compressed_tokens",
+                        "default": null
+                    },
+                    {
+                        "name": "similarity_score",
+                        "default": null
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Record a new compression operation"
+            },
+            {
+                "name": "record_token_usage",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "input_tokens",
+                        "default": null
+                    },
+                    {
+                        "name": "output_tokens",
+                        "default": null
+                    },
+                    {
+                        "name": "context_tokens",
+                        "default": null
+                    }
+                ],
+                "docstring": "Record token usage for a conversation turn"
+            },
+            {
+                "name": "get_compression_summary",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "hours",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get summary statistics for compression operations"
+            },
+            {
+                "name": "get_token_usage_summary",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "hours",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get summary statistics for token usage"
+            },
+            {
+                "name": "generate_stats_table",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "hours",
+                        "default": null
+                    }
+                ],
+                "docstring": "Generate a rich table with stats for CLI display"
+            }
+        ],
+        "classes": [
+            {
+                "name": "CompressionStats",
+                "docstring": null
+            },
+            {
+                "name": "StatsTracker",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "dataclass",
+            "Dict",
+            "List",
+            "Optional",
+            "datetime",
+            "timedelta",
+            "UTC",
+            "numpy",
+            "logging",
+            "Table"
+        ]
+    },
+    "boneyard/semantic_compressor/core/compressor.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value='sentence-transformers/all-MiniLM-L6-v2')"
+                    },
+                    {
+                        "name": "model_name",
+                        "default": "Constant(value=128)"
+                    },
+                    {
+                        "name": "chunk_size",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "_handle_short_text",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "cleaned_lines",
+                        "default": null
+                    }
+                ],
+                "docstring": "Process short text into a single chunk."
+            },
+            {
+                "name": "set_compression_level",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "level",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set compression parameters based on level."
+            },
+            {
+                "name": "_should_combine_chunks",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "chunk1",
+                        "default": null
+                    },
+                    {
+                        "name": "chunk2",
+                        "default": null
+                    }
+                ],
+                "docstring": "Determine if two chunks should be combined based on compression level."
+            },
+            {
+                "name": "split_into_sentences",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "text",
+                        "default": null
+                    }
+                ],
+                "docstring": "Enhanced sentence splitting based on compression level."
+            },
+            {
+                "name": "_chunk_text",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "text",
+                        "default": null
+                    }
+                ],
+                "docstring": "Split text with enhanced compression control."
+            },
+            {
+                "name": "_calculate_similarity",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "original_text",
+                        "default": null
+                    },
+                    {
+                        "name": "compressed_text",
+                        "default": null
+                    }
+                ],
+                "docstring": "Calculate semantic similarity between original and compressed text."
+            },
+            {
+                "name": "compress",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "text",
+                        "default": null
+                    },
+                    {
+                        "name": "metadata",
+                        "default": null
+                    }
+                ],
+                "docstring": "Compress text with enhanced metadata and stats tracking."
+            },
+            {
+                "name": "find_similar",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=3)"
+                    },
+                    {
+                        "name": "query",
+                        "default": "Constant(value=0.1)"
+                    },
+                    {
+                        "name": "contexts",
+                        "default": null
+                    },
+                    {
+                        "name": "top_k",
+                        "default": null
+                    },
+                    {
+                        "name": "recency_weight",
+                        "default": null
+                    }
+                ],
+                "docstring": "Find contexts using enhanced similarity scoring."
+            },
+            {
+                "name": "save_current_chunk",
+                "parameters": [],
+                "docstring": "Helper to save current chunk if not empty."
+            }
+        ],
+        "classes": [
+            {
+                "name": "CompressionLevel",
+                "docstring": "Compression level settings."
+            },
+            {
+                "name": "SemanticCompressor",
+                "docstring": "Core compression engine for semantic compression of text."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "uuid",
+            "numpy",
+            "datetime",
+            "UTC",
+            "logging",
+            "SentenceTransformer",
+            "Context",
+            "global_stats",
+            "nltk",
+            "sent_tokenize",
+            "os",
+            "zipfile"
+        ]
+    },
+    "boneyard/semantic_compressor/core/app_bak.py": {
+        "functions": [
+            {
+                "name": "cli",
+                "parameters": [
+                    {
+                        "name": "ctx",
+                        "default": null
+                    }
+                ],
+                "docstring": "Ramble - Context-aware CLI chat interface"
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Name(id='DEFAULT_CONFIG', ctx=Load())"
+                    },
+                    {
+                        "name": "config",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize the CLI with core components."
+            },
+            {
+                "name": "set_display",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "display",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set the display component."
+            },
+            {
+                "name": "set_output_handler",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "handler",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set raw output handler (for RambleMAXX)."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "ramble",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "on_mount",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set up Ramble output capture."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ContextConfig",
+                "docstring": "Configuration settings for context management."
+            },
+            {
+                "name": "ScoringConfig",
+                "docstring": "Configuration settings for context scoring."
+            },
+            {
+                "name": "AppConfig",
+                "docstring": "Main application configuration."
+            },
+            {
+                "name": "RambleCLI",
+                "docstring": null
+            },
+            {
+                "name": "RambleDisplay",
+                "docstring": "Display for the Ramble interface."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "sys",
+            "os",
+            "click",
+            "datetime",
+            "Optional",
+            "Dict",
+            "Any",
+            "TypedDict",
+            "SemanticCompressor",
+            "ContextManager",
+            "AnthropicClient",
+            "console",
+            "logger",
+            "setup_logging",
+            "show_welcome",
+            "CommandHandler",
+            "MessageHandler",
+            "inspect",
+            "reindex",
+            "detailed_stats",
+            "config",
+            "console",
+            "logger",
+            "setup_logging",
+            "prompt_user",
+            "show_welcome",
+            "CommandHandler",
+            "MessageHandler",
+            "Static",
+            "Console",
+            "RenderableType",
+            "Markdown",
+            "asyncio"
+        ]
+    },
+    "boneyard/semantic_compressor/utils/results_manager.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "store_level_result",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "level",
+                        "default": null
+                    },
+                    {
+                        "name": "metrics",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "get_level_result",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "level",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "save_compression_result",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "test_name",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "metrics",
+                        "default": null
+                    },
+                    {
+                        "name": "expectations",
+                        "default": null
+                    },
+                    {
+                        "name": "passed",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "ResultsManager",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Path",
+            "datetime",
+            "UTC",
+            "Dict",
+            "Any",
+            "Optional",
+            "json"
+        ]
+    },
+    "boneyard/semantic_compressor/utils/test_SemanticCompressor.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "docs/scrambled_archive_do_not_read/architecture_diagrams/20241215/interface_base.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize interface."
+            },
+            {
+                "name": "format_prompt",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format standard prompt with timestamp."
+            },
+            {
+                "name": "get_capabilities",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Return interface capabilities."
+            },
+            {
+                "name": "has_capability",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "capability",
+                        "default": null
+                    }
+                ],
+                "docstring": "Check if interface has specific capability."
+            }
+        ],
+        "classes": [
+            {
+                "name": "InterfaceBase",
+                "docstring": "Base class for scramble interfaces."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "Optional",
+            "List",
+            "ABC",
+            "abstractmethod",
+            "asyncio",
+            "datetime"
+        ]
+    },
+    "scramble/interface/ramble_interface.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "set_model_name",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Set the model name to use.\n\nArgs:\n    name: The name of the model to use"
+            },
+            {
+                "name": "format_prompt",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format prompt based on current style."
+            },
+            {
+                "name": "format_model_prompt",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "model_name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format prompt for model responses."
+            }
+        ],
+        "classes": [
+            {
+                "name": "RambleInterface",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Literal",
+            "Optional",
+            "Console",
+            "Coordinator",
+            "InterfaceBase",
+            "get_logger",
+            "os"
+        ]
+    },
+    "scramble/interface/message_controller.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "interface",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with reference to parent interface."
+            },
+            {
+                "name": "_store_context",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    },
+                    {
+                        "name": "response",
+                        "default": null
+                    }
+                ],
+                "docstring": "Store the message and response as context."
+            },
+            {
+                "name": "process_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=False)"
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    },
+                    {
+                        "name": "use_all_contexts",
+                        "default": null
+                    }
+                ],
+                "docstring": "Select relevant contexts for the message."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MessageController",
+                "docstring": "Handles message processing and model interactions."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "List",
+            "Dict",
+            "Any",
+            "datetime",
+            "dateparser",
+            "Context",
+            "uuid4",
+            "numpy",
+            "Context"
+        ]
+    },
+    "scramble/interface/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "RambleInterface",
+            "InterfaceBase"
+        ]
+    },
+    "scramble/interface/interface_base.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize interface."
+            },
+            {
+                "name": "format_prompt",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format prompt for display."
+            }
+        ],
+        "classes": [
+            {
+                "name": "InterfaceBase",
+                "docstring": "Base interface that supports core Scramble functionality."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "ABC",
+            "abstractmethod",
+            "Dict",
+            "Any",
+            "Optional",
+            "datetime",
+            "asyncio",
+            "get_logger",
+            "Coordinator"
+        ]
+    },
+    "scramble/interface/tool_controller.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "interface",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with reference to parent interface."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ToolController",
+                "docstring": "Handles tool registration and execution."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "Optional",
+            "List",
+            "ScrollTool",
+            "LocalTool",
+            "ToolRegistry"
+        ]
+    },
+    "scramble/interface/maxx_interface.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/interface/observer_concept.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "get_expression_frame",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get current frame of animation."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value='phi-2')"
+                    },
+                    {
+                        "name": "model",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "compose",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "ObserverDisplay",
+                "docstring": "A rich animated observer display."
+            },
+            {
+                "name": "LocalAIHandler",
+                "docstring": "Handles local AI processing for observer."
+            },
+            {
+                "name": "RambleMaxx",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Static",
+            "ComposeResult",
+            "Container",
+            "Animation",
+            "Console",
+            "Text",
+            "Image",
+            "numpy"
+        ]
+    },
+    "scramble/coordinator/coordinator.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize the coordination system."
+            },
+            {
+                "name": "_get_responding_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "mentioned_model",
+                        "default": null
+                    }
+                ],
+                "docstring": "Determine which model should respond."
+            },
+            {
+                "name": "find_model_mentions",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Find all @model mentions in a message."
+            },
+            {
+                "name": "get_active_models",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get list of currently active model names."
+            }
+        ],
+        "classes": [
+            {
+                "name": "Coordinator",
+                "docstring": "Coordinator for model and scroll system."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "Tuple",
+            "cast",
+            "datetime",
+            "re",
+            "get_logger",
+            "ActiveConversation",
+            "TemporalProcessor",
+            "MessageEnricher",
+            "MagicScroll",
+            "LLMModelBase",
+            "AnthropicLLMModel",
+            "OllamaLLMModel",
+            "ConfigManager"
+        ]
+    },
+    "scramble/coordinator/active_conversation.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize conversation state."
+            },
+            {
+                "name": "add_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "model_name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Add a model to the conversation."
+            },
+            {
+                "name": "remove_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "model_name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Remove a model from the conversation."
+            },
+            {
+                "name": "parse_addressed_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Parse message for @model addressing with case-insensitive matching.\nReturns (addressed_model, cleaned_message)"
+            },
+            {
+                "name": "should_model_respond",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "model_name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Determine if a model should respond based on conversation state."
+            },
+            {
+                "name": "get_context_for_model",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "model_name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get any missed context for a model."
+            },
+            {
+                "name": "get_last_n_messages",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "n",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get the last n messages from the conversation."
+            },
+            {
+                "name": "get_messages_since",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "timestamp",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get all messages since a specific timestamp."
+            },
+            {
+                "name": "format_conversation",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format the conversation for storage."
+            },
+            {
+                "name": "format_conversation_for_storage",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format conversation for storage with metadata."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ConversationMessage",
+                "docstring": "Represents a single message in the conversation."
+            },
+            {
+                "name": "ActiveConversation",
+                "docstring": "Represents a live conversation session."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "dataclass",
+            "field",
+            "datetime",
+            "Set",
+            "List",
+            "Optional",
+            "Dict",
+            "Any"
+        ]
+    },
+    "scramble/coordinator/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Coordinator",
+            "ActiveConversation"
+        ]
+    },
+    "scramble/coordinator/message_enricher.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "magic_scroll",
+                        "default": null
+                    },
+                    {
+                        "name": "temporal_processor",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with required components."
+            },
+            {
+                "name": "_check_memory_triggers",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Check for memory trigger patterns and return matches with their patterns."
+            },
+            {
+                "name": "_extract_topics_from_matches",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    },
+                    {
+                        "name": "matches",
+                        "default": null
+                    }
+                ],
+                "docstring": "Extract relevant topics from the memory trigger matches."
+            },
+            {
+                "name": "_format_enriched_context",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "context",
+                        "default": null
+                    },
+                    {
+                        "name": "original_message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format the enriched context with the original message."
+            }
+        ],
+        "classes": [
+            {
+                "name": "EnrichedContext",
+                "docstring": "Container for different types of enriched context."
+            },
+            {
+                "name": "MessageEnricher",
+                "docstring": "Enriches messages with relevant historical context."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "Set",
+            "Tuple",
+            "dataclass",
+            "field",
+            "datetime",
+            "timedelta",
+            "re",
+            "get_logger",
+            "MagicScroll",
+            "EntryType",
+            "TemporalProcessor",
+            "TemporalReference"
+        ]
+    },
+    "scramble/coordinator/temporal_processor.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "parse_temporal_references",
+                "parameters": [
+                    {
+                        "name": "content",
+                        "default": null
+                    }
+                ],
+                "docstring": "Parse temporal references from message content using dateparser."
+            }
+        ],
+        "classes": [
+            {
+                "name": "TemporalReference",
+                "docstring": "Type for temporal reference information."
+            },
+            {
+                "name": "TemporalProcessor",
+                "docstring": "Processes temporal references in messages."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "List",
+            "Dict",
+            "Any",
+            "Optional",
+            "dateparser"
+        ]
+    },
+    "scramble/model_config/config_manager.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize configuration manager."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ConfigManager",
+                "docstring": "Manages model configurations and API keys."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "Optional",
+            "Path",
+            "yaml",
+            "logging",
+            "aiofiles"
+        ]
+    },
+    "scramble/magicscroll/ms_search.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "index",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with reference to MSIndex."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MSSearch",
+                "docstring": "Handles search operations across Neo4j and Redis."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "TYPE_CHECKING",
+            "datetime",
+            "dataclass",
+            "NodeWithScore",
+            "QueryBundle",
+            "PGRetriever",
+            "VectorContextRetriever",
+            "MetadataFilter",
+            "MetadataFilters",
+            "FilterOperator",
+            "MSEntry",
+            "EntryType",
+            "SearchResult",
+            "get_logger",
+            "MSIndex"
+        ]
+    },
+    "scramble/magicscroll/ms_store.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value='magicscroll')"
+                    },
+                    {
+                        "name": "namespace",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "redis_client",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize store with Redis client."
+            },
+            {
+                "name": "redis",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Access to Redis client."
+            }
+        ],
+        "classes": [
+            {
+                "name": "RedisStore",
+                "docstring": "Redis storage for MagicScroll entries using LlamaIndex RedisDocumentStore."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Redis",
+            "Optional",
+            "Dict",
+            "Any",
+            "logging",
+            "Document",
+            "RedisDocumentStore",
+            "MSEntry",
+            "asyncio",
+            "functools"
+        ]
+    },
+    "scramble/magicscroll/ms_entity.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with compiled regex patterns."
+            },
+            {
+                "name": "extract_entities",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "content",
+                        "default": null
+                    }
+                ],
+                "docstring": "Extract entities from content using all available methods."
+            },
+            {
+                "name": "_extract_structured_entities",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "content",
+                        "default": null
+                    }
+                ],
+                "docstring": "Extract entities using regex patterns."
+            },
+            {
+                "name": "_extract_noun_phrases",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "content",
+                        "default": null
+                    }
+                ],
+                "docstring": "Extract potential noun phrases using basic patterns.\nThis is a simple implementation - could be enhanced with proper NLP."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "graph_manager",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with reference to graph manager."
+            }
+        ],
+        "classes": [
+            {
+                "name": "ExtractedEntity",
+                "docstring": "Represents an extracted entity with context."
+            },
+            {
+                "name": "EntityExtractor",
+                "docstring": "Extracts entities from conversation content."
+            },
+            {
+                "name": "EntityManager",
+                "docstring": "Manages entity relationships and metadata."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "List",
+            "Set",
+            "Dict",
+            "Any",
+            "Optional",
+            "re",
+            "dataclass",
+            "get_logger"
+        ]
+    },
+    "scramble/magicscroll/ms_index.py": {
+        "functions": [
+            {
+                "name": "literal_query",
+                "parameters": [
+                    {
+                        "name": "text",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create a Query object from a string, casting to LiteralString."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize basic attributes."
+            },
+            {
+                "name": "add_entry",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "entry",
+                        "default": null
+                    }
+                ],
+                "docstring": "Synchronous add entry - called internally."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MSIndex",
+                "docstring": "LlamaIndex implementation for MagicScroll."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "datetime",
+            "timezone",
+            "timedelta",
+            "List",
+            "Dict",
+            "Any",
+            "Optional",
+            "cast",
+            "AsyncGraphDatabase",
+            "AsyncDriver",
+            "Query",
+            "LiteralString",
+            "Settings",
+            "Document",
+            "StorageContext",
+            "PropertyGraphIndex",
+            "Neo4jPropertyGraphStore",
+            "SentenceSplitter",
+            "HuggingFaceEmbedding",
+            "RedisDocumentStore",
+            "Config",
+            "get_logger",
+            "MSEntry",
+            "EntryType",
+            "MSGraphManager",
+            "RedisStore",
+            "SearchResult",
+            "MSSearch",
+            "asyncio",
+            "functools",
+            "MSSearch",
+            "MSSearch",
+            "Ollama"
+        ]
+    },
+    "scramble/magicscroll/ms_graph.py": {
+        "functions": [
+            {
+                "name": "literal_query",
+                "parameters": [
+                    {
+                        "name": "text",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create a Query object from a string, casting to LiteralString."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "neo4j_driver",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with Neo4j driver."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MSGraphManager",
+                "docstring": "Handles Neo4j graph operations for MagicScroll."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "Set",
+            "datetime",
+            "asyncio",
+            "AsyncGraphDatabase",
+            "AsyncDriver",
+            "Query",
+            "Neo4jError",
+            "get_logger",
+            "MSEntry",
+            "LiteralString",
+            "cast"
+        ]
+    },
+    "scramble/magicscroll/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "MagicScroll",
+            "MSEntry",
+            "MSConversation",
+            "MSDocument",
+            "MSImage",
+            "MSCode",
+            "EntryType",
+            "MSIndex",
+            "RedisStore",
+            "MSSearch",
+            "MSGraphManager",
+            "SearchResult"
+        ]
+    },
+    "scramble/magicscroll/ms_types.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "SearchResult",
+                "docstring": "Container for search results with source and confidence information."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "dataclass",
+            "MSEntry"
+        ]
+    },
+    "scramble/magicscroll/ms_entry.py": {
+        "functions": [
+            {
+                "name": "to_dict",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Convert entry to dictionary format."
+            },
+            {
+                "name": "from_dict",
+                "parameters": [
+                    {
+                        "name": "cls",
+                        "default": null
+                    },
+                    {
+                        "name": "data",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create entry from dictionary format."
+            },
+            {
+                "name": "from_neo4j",
+                "parameters": [
+                    {
+                        "name": "cls",
+                        "default": null
+                    },
+                    {
+                        "name": "node",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create entry from Neo4j node.\n\nNote: The node parameter is typed as Any to avoid circular imports,\nbut it should be a neo4j.graph.Node."
+            },
+            {
+                "name": "to_document",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Convert entry to LlamaIndex Document for storage/indexing."
+            },
+            {
+                "name": "from_document",
+                "parameters": [
+                    {
+                        "name": "cls",
+                        "default": null
+                    },
+                    {
+                        "name": "doc",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create entry from LlamaIndex Document.\n\nNote: This assumes the document was created from an MSEntry.\nIt reconstructs the original entry type from metadata."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "content",
+                        "default": null
+                    },
+                    {
+                        "name": "metadata",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "EntryType",
+                "docstring": "Types of entries in MagicScroll."
+            },
+            {
+                "name": "MSEntry",
+                "docstring": "Base class for MagicScroll entries."
+            },
+            {
+                "name": "MSConversation",
+                "docstring": "A conversation entry - fully implemented."
+            },
+            {
+                "name": "MSDocument",
+                "docstring": "A document entry (PDF, text, etc) - NOT YET IMPLEMENTED.\nWill require appropriate LlamaIndex Reader (PDFReader, etc)\nto convert to text before storage."
+            },
+            {
+                "name": "MSImage",
+                "docstring": "An image entry - NOT YET IMPLEMENTED.\nWill require ImageReader or similar to extract/generate \ntext content before storage."
+            },
+            {
+                "name": "MSCode",
+                "docstring": "A code entry - NOT YET IMPLEMENTED.\nMay require special handling for language-specific parsing\nor documentation extraction."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "dataclass",
+            "field",
+            "datetime",
+            "Enum",
+            "Dict",
+            "Any",
+            "Optional",
+            "uuid",
+            "Document"
+        ]
+    },
+    "scramble/magicscroll/magic_scroll.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "config",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize with config."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MagicScroll",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "List",
+            "Any",
+            "Optional",
+            "Union",
+            "datetime",
+            "MSEntry",
+            "EntryType",
+            "MSIndex",
+            "MSSearch",
+            "SearchResult",
+            "get_logger",
+            "Config",
+            "config"
+        ]
+    },
+    "scramble/utils/logging.py": {
+        "functions": [
+            {
+                "name": "setup_logging",
+                "parameters": [
+                    {
+                        "name": "level",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "debug_session",
+                        "default": "Constant(value=None)"
+                    }
+                ],
+                "docstring": "Configure logging with minimal format."
+            },
+            {
+                "name": "get_logger",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get a logger with the proper format."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "logging",
+            "sys",
+            "Optional",
+            "List",
+            "RichHandler",
+            "Console",
+            "Path",
+            "datetime",
+            "Config"
+        ]
+    },
+    "scramble/utils/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/utils/migrate_contexts.py": {
+        "functions": [
+            {
+                "name": "safe_unpickle",
+                "parameters": [
+                    {
+                        "name": "file_path",
+                        "default": null
+                    }
+                ],
+                "docstring": "Safely unpickle a context file with error handling."
+            },
+            {
+                "name": "extract_text_content",
+                "parameters": [
+                    {
+                        "name": "compressed_tokens",
+                        "default": null
+                    }
+                ],
+                "docstring": "Extract text content from compressed tokens."
+            },
+            {
+                "name": "create_full_file",
+                "parameters": [
+                    {
+                        "name": "context_data",
+                        "default": null
+                    },
+                    {
+                        "name": "base_path",
+                        "default": null
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create a .full file containing the conversation text."
+            },
+            {
+                "name": "migrate_contexts",
+                "parameters": [
+                    {
+                        "name": "ramble_dir",
+                        "default": "Constant(value='~/.ramble')"
+                    }
+                ],
+                "docstring": "Migrate existing .ctx files to the new storage hierarchy."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "os",
+            "pickle",
+            "Path",
+            "json",
+            "datetime",
+            "Dict",
+            "Any",
+            "List",
+            "Optional"
+        ]
+    },
+    "scramble/service_client/base_service_client.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/service_client/service_manager.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "server_id",
+                        "default": null
+                    },
+                    {
+                        "name": "config",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "get_server",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "server_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get a server by ID"
+            }
+        ],
+        "classes": [
+            {
+                "name": "ServerConfig",
+                "docstring": "Configuration for a tool server"
+            },
+            {
+                "name": "ServerCommand",
+                "docstring": "Command to start a server"
+            },
+            {
+                "name": "ToolServer",
+                "docstring": "Represents a single tool server"
+            },
+            {
+                "name": "ToolServerManager",
+                "docstring": "Manages multiple tool servers"
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "dataclass",
+            "Dict",
+            "Optional",
+            "List",
+            "asyncio",
+            "logging",
+            "ToolClient"
+        ]
+    },
+    "scramble/service_client/tool_service_client.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/service_client/contextual_service_client.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/model/ollama_llm_model.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Basic initialization."
+            },
+            {
+                "name": "_prepare_chat_messages",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Convert message history to Ollama-compatible chat format."
+            },
+            {
+                "name": "_get_model_options",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "additional_options",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get model options from config and additional options."
+            },
+            {
+                "name": "get_model_info",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get information about the current model."
+            }
+        ],
+        "classes": [
+            {
+                "name": "OllamaModelOptions",
+                "docstring": "Type definition for Ollama model options."
+            },
+            {
+                "name": "OllamaLLMModel",
+                "docstring": "Implementation for Ollama-based local LLM models."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "AsyncGenerator",
+            "Union",
+            "Optional",
+            "List",
+            "TypedDict",
+            "logging",
+            "AsyncClient",
+            "LLMModelBase",
+            "Message"
+        ]
+    },
+    "scramble/model/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "AnthropicLLMModel",
+            "LLMModelBase",
+            "ModelBase"
+        ]
+    },
+    "scramble/model/model_base.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "ModelBase",
+                "docstring": "Base abstract class for all models"
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "ABC",
+            "abstractmethod",
+            "Any",
+            "Dict",
+            "List",
+            "Optional",
+            "ClassVar"
+        ]
+    },
+    "scramble/model/oai_llm_model.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "model_name",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "OAILLMModel",
+                "docstring": "OpenAI model implementation."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "AsyncGenerator",
+            "List",
+            "cast",
+            "MessageParam",
+            "ModelParam",
+            "logging",
+            "LLMModelBase"
+        ]
+    },
+    "scramble/model/other_llm_model.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Basic initialization."
+            },
+            {
+                "name": "get_model_info",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get information about the current model."
+            }
+        ],
+        "classes": [
+            {
+                "name": "OtherLLMModel",
+                "docstring": "Implementation for other LLM providers."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "AsyncGenerator",
+            "Union",
+            "Optional",
+            "LLMModelBase"
+        ]
+    },
+    "scramble/model/anthropic_llm_model.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Initialize the Anthropic model."
+            },
+            {
+                "name": "_format_messages_with_context",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "prompt",
+                        "default": null
+                    }
+                ],
+                "docstring": "Format messages for the Anthropic API with context."
+            },
+            {
+                "name": "_create_anthropic_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "role",
+                        "default": null
+                    },
+                    {
+                        "name": "content",
+                        "default": null
+                    }
+                ],
+                "docstring": "Create a message in Anthropic's format."
+            },
+            {
+                "name": "get_model_info",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Get information about model capabilities."
+            }
+        ],
+        "classes": [
+            {
+                "name": "AnthropicLLMModel",
+                "docstring": "Implementation for Anthropic Claude models using official SDK."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "AsyncGenerator",
+            "List",
+            "cast",
+            "Optional",
+            "Union",
+            "AsyncAnthropic",
+            "MessageParam",
+            "ModelParam",
+            "logging",
+            "datetime",
+            "LLMModelBase",
+            "Message",
+            "Role"
+        ]
+    },
+    "scramble/model/llm_model_base.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Basic initialization only. Use create() instead."
+            },
+            {
+                "name": "_trim_context_if_needed",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Trim context buffer if it exceeds max length."
+            },
+            {
+                "name": "_add_to_context",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "role",
+                        "default": null
+                    },
+                    {
+                        "name": "content",
+                        "default": null
+                    },
+                    {
+                        "name": "metadata",
+                        "default": null
+                    }
+                ],
+                "docstring": "Add a message to the context buffer."
+            }
+        ],
+        "classes": [
+            {
+                "name": "Message",
+                "docstring": "Type for standardized message format."
+            },
+            {
+                "name": "LLMModelBase",
+                "docstring": "Base class adding Scramble-specific features to LLM models."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "AsyncGenerator",
+            "Union",
+            "List",
+            "Literal",
+            "TypedDict",
+            "Optional",
+            "datetime",
+            "asyncio",
+            "time",
+            "logging",
+            "ABC",
+            "abstractmethod",
+            "ModelBase",
+            "ConfigManager"
+        ]
+    },
+    "scramble/tool/tool_registry.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "ToolRegistry",
+                "docstring": "Registry for all types of tools."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "logging",
+            "Dict",
+            "Any",
+            "Literal",
+            "Optional",
+            "LocalTool",
+            "MCPTool",
+            "DynamicTool"
+        ]
+    },
+    "scramble/tool/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/tool/tool_interface.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "ToolInterface",
+                "docstring": "Interface that UIs must implement for tool support."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "List",
+            "Dict",
+            "Any",
+            "ScrollTool"
+        ]
+    },
+    "scramble/tool/tool_base.py": {
+        "functions": [],
+        "classes": [
+            {
+                "name": "ScrollTool",
+                "docstring": "Base class for all tools."
+            },
+            {
+                "name": "LocalTool",
+                "docstring": "Tool that runs locally in the same process."
+            },
+            {
+                "name": "MCPTool",
+                "docstring": "Tool that runs on a remote MCP server."
+            },
+            {
+                "name": "DynamicTool",
+                "docstring": "Tool created by models at runtime."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "ABC",
+            "abstractmethod",
+            "Dict",
+            "Any",
+            "Optional",
+            "List",
+            "Literal",
+            "ScrollEntry"
+        ]
+    },
+    "scramble/interface/widgets/base_textual_widget.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "register_tool",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "name",
+                        "default": null
+                    },
+                    {
+                        "name": "method",
+                        "default": null
+                    }
+                ],
+                "docstring": "Register a widget method as a tool."
+            },
+            {
+                "name": "set_interface",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "interface",
+                        "default": null
+                    }
+                ],
+                "docstring": "Connect widget to interface."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "widget",
+                        "default": null
+                    },
+                    {
+                        "name": "data",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "BaseTextualWidget",
+                "docstring": "Base class for Scramble widgets."
+            },
+            {
+                "name": "BaseMessage",
+                "docstring": "Base message type for Scramble Base widgets."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Widget",
+            "Dict",
+            "Any",
+            "Optional",
+            "LocalTool",
+            "asyncio"
+        ]
+    },
+    "scramble/interface/widgets/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "scramble/interface/widgets/chat_terminal_widget.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "update_terminal_size",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Update terminal size based on widget size."
+            },
+            {
+                "name": "write",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "text",
+                        "default": null
+                    }
+                ],
+                "docstring": "Write text to the terminal."
+            },
+            {
+                "name": "clear",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Clear the terminal screen."
+            },
+            {
+                "name": "render",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    }
+                ],
+                "docstring": "Render the terminal content."
+            },
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "sender",
+                        "default": null
+                    },
+                    {
+                        "name": "text",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "ChatTerminalWidget",
+                "docstring": "A terminal-like widget optimized for chat interactions."
+            },
+            {
+                "name": "Input",
+                "docstring": "Message sent when user submits input."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Message",
+            "Key",
+            "Segment",
+            "Style",
+            "pyte",
+            "BaseTextualWidget"
+        ]
+    },
+    "scramble/db/neo4j/scripts/apply_schema.py": {
+        "functions": [
+            {
+                "name": "wait_for_neo4j",
+                "parameters": [
+                    {
+                        "name": "uri",
+                        "default": "Constant(value=30)"
+                    },
+                    {
+                        "name": "max_attempts",
+                        "default": "Constant(value=2)"
+                    },
+                    {
+                        "name": "delay",
+                        "default": null
+                    }
+                ],
+                "docstring": "Wait for Neo4j to become available"
+            },
+            {
+                "name": "apply_schema_file",
+                "parameters": [
+                    {
+                        "name": "driver",
+                        "default": null
+                    },
+                    {
+                        "name": "schema_file",
+                        "default": null
+                    }
+                ],
+                "docstring": "Apply a single schema file"
+            },
+            {
+                "name": "main",
+                "parameters": [],
+                "docstring": null
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "os",
+            "time",
+            "GraphDatabase",
+            "Path"
+        ]
+    },
+    "scramble/tool/mcp/protocol.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "tool_interface",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [
+            {
+                "name": "MCPHandler",
+                "docstring": "Handles MCP (Managed Chat Protocol) interactions."
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Dict",
+            "Any",
+            "Optional",
+            "MCPCommand",
+            "MCPResponse",
+            "ToolInterface"
+        ]
+    },
+    "scramble/tool/mcp/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "MCPHandler",
+            "MCPCommand",
+            "MCPResponse"
+        ]
+    },
+    "scramble/tool/mcp/types.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramble/ui/console.py": {
+        "functions": [
+            {
+                "name": "get_prompt_cyberpunk",
+                "parameters": [],
+                "docstring": null
+            },
+            {
+                "name": "get_prompt_minimal",
+                "parameters": [],
+                "docstring": null
+            },
+            {
+                "name": "get_prompt_terminal",
+                "parameters": [],
+                "docstring": null
+            },
+            {
+                "name": "get_prompt_scroll",
+                "parameters": [],
+                "docstring": null
+            },
+            {
+                "name": "prompt_user",
+                "parameters": [
+                    {
+                        "name": "prompt_style",
+                        "default": "Constant(value='scroll')"
+                    }
+                ],
+                "docstring": "Get user input with styled prompt."
+            },
+            {
+                "name": "setup_logging",
+                "parameters": [
+                    {
+                        "name": "console",
+                        "default": null
+                    }
+                ],
+                "docstring": "Configure application logging with rich handler."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Console",
+            "RichHandler",
+            "Prompt",
+            "Style",
+            "datetime",
+            "logging"
+        ]
+    },
+    "ramble/ui/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramble/ui/welcome.py": {
+        "functions": [
+            {
+                "name": "show_welcome",
+                "parameters": [
+                    {
+                        "name": "store",
+                        "default": null
+                    }
+                ],
+                "docstring": "Show welcome message and stats."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Console",
+            "Panel",
+            "Table",
+            "ContextStore"
+        ]
+    },
+    "ramble/ui/panels.py": {
+        "functions": [
+            {
+                "name": "show_help",
+                "parameters": [],
+                "docstring": "Show help message."
+            },
+            {
+                "name": "show_contexts",
+                "parameters": [
+                    {
+                        "name": "store",
+                        "default": null
+                    }
+                ],
+                "docstring": "Show stored contexts with semantic chunks."
+            },
+            {
+                "name": "show_stats",
+                "parameters": [
+                    {
+                        "name": "cli",
+                        "default": null
+                    }
+                ],
+                "docstring": "Show enhanced system statistics."
+            },
+            {
+                "name": "show_compression_analysis",
+                "parameters": [
+                    {
+                        "name": "cli",
+                        "default": null
+                    }
+                ],
+                "docstring": "Show detailed compression analysis."
+            },
+            {
+                "name": "show_similarity_debug",
+                "parameters": [
+                    {
+                        "name": "cli",
+                        "default": null
+                    },
+                    {
+                        "name": "query",
+                        "default": null
+                    }
+                ],
+                "docstring": "Show similarity scores for all contexts."
+            },
+            {
+                "name": "add_stats_row",
+                "parameters": [
+                    {
+                        "name": "timeframe",
+                        "default": null
+                    },
+                    {
+                        "name": "stats",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Table",
+            "Panel",
+            "Markdown",
+            "datetime",
+            "console",
+            "logger"
+        ]
+    },
+    "ramble/tools/terminal.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramble/tools/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramble/commands/config.py": {
+        "functions": [
+            {
+                "name": "config",
+                "parameters": [],
+                "docstring": "Show current configuration settings."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "click",
+            "Table",
+            "Panel",
+            "console",
+            "RambleCLI"
+        ]
+    },
+    "ramble/commands/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramble/commands/inspect.py": {
+        "functions": [
+            {
+                "name": "inspect",
+                "parameters": [
+                    {
+                        "name": "context_id",
+                        "default": "Constant(value=None)"
+                    }
+                ],
+                "docstring": "Inspect context files and compare full/compressed versions."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "click",
+            "pickle",
+            "Table",
+            "console",
+            "RambleCLI"
+        ]
+    },
+    "ramble/commands/stats.py": {
+        "functions": [
+            {
+                "name": "detailed_stats",
+                "parameters": [
+                    {
+                        "name": "hours",
+                        "default": null
+                    }
+                ],
+                "docstring": "Show detailed statistics for the last N hours."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "click",
+            "Table",
+            "Panel",
+            "console",
+            "RambleCLI"
+        ]
+    },
+    "ramble/commands/reindex.py": {
+        "functions": [
+            {
+                "name": "reindex",
+                "parameters": [],
+                "docstring": "Rebuild context index from stored files."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "click",
+            "Table",
+            "console",
+            "RambleCLI"
+        ]
+    },
+    "ramble/handlers/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": []
+    },
+    "ramble/handlers/debug.py": {
+        "functions": [
+            {
+                "name": "toggle_debug",
+                "parameters": [
+                    {
+                        "name": "cmd",
+                        "default": null
+                    }
+                ],
+                "docstring": "Toggle debug mode."
+            },
+            {
+                "name": "show_context_dates",
+                "parameters": [
+                    {
+                        "name": "cli",
+                        "default": null
+                    }
+                ],
+                "docstring": "Debug helper to show all context dates."
+            },
+            {
+                "name": "show_context_selection",
+                "parameters": [
+                    {
+                        "name": "cli",
+                        "default": null
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    }
+                ],
+                "docstring": "Debug helper to show context selection process."
+            },
+            {
+                "name": "inspect_contexts",
+                "parameters": [
+                    {
+                        "name": "cli",
+                        "default": "Constant(value=None)"
+                    },
+                    {
+                        "name": "context_id",
+                        "default": null
+                    }
+                ],
+                "docstring": "Inspect context files and compare versions."
+            }
+        ],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "logging",
+            "Optional",
+            "Table",
+            "Text",
+            "console",
+            "logger"
+        ]
+    },
+    "ramble/handlers/messages.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "cli",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "process_message",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": "Constant(value=False)"
+                    },
+                    {
+                        "name": "message",
+                        "default": null
+                    },
+                    {
+                        "name": "use_all_contexts",
+                        "default": null
+                    }
+                ],
+                "docstring": "Process message and select relevant contexts."
+            }
+        ],
+        "classes": [
+            {
+                "name": "MessageHandler",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "List",
+            "Context",
+            "console",
+            "logger",
+            "dateparser",
+            "datetime",
+            "Markdown"
+        ]
+    },
+    "ramble/handlers/commands.py": {
+        "functions": [
+            {
+                "name": "__init__",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "cli",
+                        "default": null
+                    }
+                ],
+                "docstring": null
+            },
+            {
+                "name": "handle_command",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "cmd",
+                        "default": null
+                    }
+                ],
+                "docstring": "Handle CLI commands."
+            },
+            {
+                "name": "handle_sim_command",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "args",
+                        "default": null
+                    }
+                ],
+                "docstring": "Handle similarity command."
+            },
+            {
+                "name": "handle_test_command",
+                "parameters": [
+                    {
+                        "name": "self",
+                        "default": null
+                    },
+                    {
+                        "name": "args",
+                        "default": null
+                    }
+                ],
+                "docstring": "Handle test command."
+            }
+        ],
+        "classes": [
+            {
+                "name": "CommandHandler",
+                "docstring": null
+            }
+        ],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "logging",
+            "Optional",
+            "Table",
+            "Panel",
+            "console",
+            "logger",
+            "panels",
+            "debug"
+        ]
+    },
+    "build/lib/src/scramble/__init__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "Context",
+            "SemanticCompressor",
+            "ContextStore",
+            "AnthropicClient"
+        ]
+    },
+    "build/lib/src/scramble/__main__.py": {
+        "functions": [],
+        "classes": [],
+        "docstrings": [],
+        "todos": [],
+        "imports": [
+            "cli"
+        ]
+    }
+}

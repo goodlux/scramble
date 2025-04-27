@@ -39,28 +39,50 @@ class InterfaceBase(ABC):
     
     async def run(self) -> None:
         """Main interface loop."""
-        await self.setup()
-        
         try:
+            await self.setup()
             await self.display_output("Welcome to Scramble!")
             
+            # Add a special message for CI/testing mode
+            import os
+            if os.environ.get('CI_MODE', '0') == '1' or os.environ.get('SIMULATE_MODELS', '0') == '1':
+                await self.display_output("💡 Running in simulation/CI mode. Type a message and press Enter.")
+                await self.display_output("   Type 'exit' or press Ctrl+D to exit.")
+            
             while not self._shutdown_requested:
-                await self.display_output(f"[{datetime.now().strftime('%H:%M')}] > ")
-                user_input = await self.get_input()
-                
-                if user_input.lower() in ['exit', 'quit', ':q']:
-                    if self.coordinator:
-                        logger.info("Saving conversation...")
-                        await self.coordinator.save_conversation_to_magicscroll()
-                    break
+                try:
+                    user_input = await self.get_input()
                     
-                await self.handle_user_input(user_input)
+                    if user_input.lower() in ['exit', 'quit', ':q']:
+                        if self.coordinator:
+                            logger.info("Saving conversation...")
+                            try:
+                                await self.coordinator.save_conversation_to_magicscroll()
+                            except Exception as save_err:
+                                logger.warning(f"Failed to save conversation: {save_err}")
+                        break
+                        
+                    await self.handle_user_input(user_input)
+                    
+                except EOFError:
+                    # Handle Ctrl+D gracefully
+                    logger.info("EOF detected (Ctrl+D), shutting down")
+                    await self.display_output("\nGoodbye! (EOF/Ctrl+D detected)")
+                    break
+                except KeyboardInterrupt:
+                    # Handle Ctrl+C gracefully
+                    logger.info("KeyboardInterrupt detected (Ctrl+C), shutting down")
+                    await self.display_output("\nGoodbye! (Ctrl+C detected)")
+                    break
+                except Exception as input_err:
+                    logger.error(f"Error getting input: {input_err}")
+                    await self.display_error(f"Input error: {input_err}")
+                    # Wait a moment and continue
+                    await asyncio.sleep(1)
                 
-        except KeyboardInterrupt:
-            await self._emergency_shutdown()
         except Exception as e:
-            await self.display_error(f"Fatal error: {e}")
-            await self._emergency_shutdown()
+            logger.error(f"Fatal error: {e}")
+            raise
     
     # Required abstract methods
     @abstractmethod
@@ -87,6 +109,11 @@ class InterfaceBase(ABC):
     async def get_input(self) -> str:
         """Get input from user."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def display_model_output(self, content: str, model_name: str) -> None:
+        """Display model output with speaker indicator."""
+        raise NotImplementedError
     
     @abstractmethod
     async def clear(self) -> None:
@@ -106,11 +133,11 @@ class InterfaceBase(ABC):
                     case 'add':
                         if len(command) > 1:
                             await self.coordinator.add_model_to_conversation(command[1])
-                            await self.display_output(f"system> {command[1]} was added to the conversation")
+                            await self.display_model_output(f"{command[1]} was added to the conversation", "system")
                     case 'remove':
                         if len(command) > 1:
                             await self.coordinator.remove_model_from_conversation(command[1])
-                            await self.display_output(f"system> {command[1]} was removed from the conversation")
+                            await self.display_model_output(f"{command[1]} was removed from the conversation", "system")
                     case _:
                         pass  # Handle unknown commands
                 return
@@ -119,18 +146,7 @@ class InterfaceBase(ABC):
             response = await self.coordinator.process_message(user_input)
             if response and response.get("response"):
                 model_name = response.get("model", "system")
-                if model_name == "system":
-                    await self.display_output(f"system> {response['response']}")
-                else:
-                    await self.display_output(response["response"])
+                await self.display_model_output(response["response"], model_name)
                 
         except Exception as e:
             await self.display_error(f"Error processing input: {e}")
-    
-    async def _emergency_shutdown(self) -> None:
-        """Handle emergency shutdown."""
-        await self.display_status("\n🚨 Emergency shutdown initiated")
-        if self.coordinator:
-            logger.info("Saving conversation...")
-            await self.coordinator.save_conversation_to_magicscroll()
-        self._shutdown_requested = True

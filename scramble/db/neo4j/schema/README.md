@@ -16,6 +16,12 @@ Schema for document storage and relationships:
 - Content relationship types
 - Redis integration properties
 
+### 003_memory_schema.cypher
+Enhanced memory and entity tracking:
+- Entry and Entity nodes
+- Memory relationships
+- Enhanced temporal tracking
+
 ## Running the Schema
 
 To apply the schema to a new Neo4j database:
@@ -26,6 +32,7 @@ To apply the schema to a new Neo4j database:
 ```bash
 cat schema/001_core_schema.cypher | cypher-shell -u neo4j -p your_password
 cat schema/002_document_schema.cypher | cypher-shell -u neo4j -p your_password
+cat schema/003_memory_schema.cypher | cypher-shell -u neo4j -p your_password
 ```
 
 Or using the Neo4j Browser, copy and paste the contents of each file in order.
@@ -56,3 +63,8 @@ The schema defines several relationship types for different purposes:
 - :CONTAINS - Content composition
 - :IMPLEMENTS - Code implementation links
 - :ILLUSTRATES - Image illustration links
+
+### Memory Relationships
+- :MENTIONS - Entry to Entity connections
+- :CONTINUES - Sequential relationship between Entries
+- :RELATED_TO - Entity to Entity connections
